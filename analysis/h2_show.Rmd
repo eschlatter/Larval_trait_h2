@@ -1,0 +1,1246 @@
+---
+title: 'A. percula Larval Trait Heritability'
+author: "E Schlatter"
+date: "5/11/2020"
+output:
+  pdf_document: default
+  html_document:
+    keep_md: yes
+---
+
+Estimates heritability parameters from real A. percula larval swimming speed data (collected summer 2019)
+
+```{r setup, include=FALSE}
+setwd('C:/Users/eschlatter/Dropbox/Code/larval_h2')
+library(MCMCglmm)
+library(dplyr)
+library(knitr)
+library(MasterBayes) #has pedigree-manipulation functions to replace those in the defunct pedigree package
+library(ggplot2)
+library(gridExtra)
+library(extraDistr)
+library(lme4)
+library(lmerTest)
+library(merTools)
+library(optimx)
+library(dfoptim)
+library(r2glmm)
+library(performance)
+library(see)
+library(ggrepel)
+library(bayesplot)
+
+setwd('C:/Users/eschlatter/Dropbox/Code/larval_h2')
+```
+
+##Read in and process the data.
+
+Creates the following objects we'll use going forward:
+
+$\textbf{phens}$: a list of each larva and its swimming speed and clutch (+other covariates to be added). (Each parent also has a row in this list, to be compatible with relatedness matrix, but its swimming speed and covariates are all NA.)
+
+$\textbf{Ainv}$: the inverse of the relatedness matrix, A. In A, $A_{ij}=$probability of identity by descent of an allele in individuals i and j.
+```{r}
+larvae=as.data.frame(read.csv('Larvae.csv',header=TRUE))
+larvae=mutate(larvae,larvalID=Clutch+.01*Larva) #create unique identifier for each larva
+
+metadata=as.data.frame(read.csv('metadata_SL.csv',header=TRUE))
+colnames(metadata)[1]='Clutch'
+
+lengths=as.data.frame(read.csv('Lengths.csv',header=TRUE))
+lengths=mutate(lengths,larvalID=Clutch+.01*Larva) #create unique identifier for each larva
+lengths=dplyr::select(lengths,-Clutch,-Larva)
+
+larvae=merge(larvae,lengths,by='larvalID')
+larvae=rename(larvae,SL=Average.length)
+larvae$SL=as.numeric(larvae$SL)  #this will give "NAs introduced by coercion" -- that's fine
+for(i in 1:nrow(larvae)){larvae$SL[i]=ifelse(larvae$Dead.before.preservation.[i]==1,NA,larvae$SL[i])} #remove SL measurements for dead larvae
+#add a Time column
+larvae=mutate(larvae,'Time'=Time.min.+(1/60)*Time.sec.)
+larvae=subset(larvae,Clutch>4) #first four clutches didn't count
+larvae$Clutch=as.factor(larvae$Clutch)
+larvae$larvalID=as.factor(larvae$larvalID)
+
+#merge the larvae and metadata data frames, so metadata info is associated with each larva
+larvae=merge(larvae,metadata,by='Clutch')
+larvae=dplyr::select(larvae,larvalID,everything()) #move larvalID to first column
+
+larvae=subset(larvae,is.na(SL)==FALSE) #remove larvae with no SL measurement
+larvae=subset(larvae,is.na(Time)==FALSE) #remove larvae with no speed measurement
+larvae=mutate(larvae,speed=Time-2) #Ucrit is swim time minus 2cm/sec
+
+#If you uncomment this, everything will use the twice-trimmed dataset
+mothers_bothgood=c(5,6,9,10,13,18,22,30,59,66,70,114)
+fathers_bothgood=c(38,96,97,98,103,108,111,115,131,156,165,171)
+metadata=subset(metadata,R1.ID.%in%mothers_bothgood&R2.ID.%in%fathers_bothgood)
+larvae=subset(larvae,R1.ID.%in%mothers_bothgood&R2.ID.%in%fathers_bothgood)
+
+#pedigree and Ainv -- we'll need this later for heritability analysis
+pedigree=dplyr::select(larvae,id=larvalID,dam=R1.ID.,sire=R2.ID.)
+full_pedig=insertPed(pedigree)  #pedigree utility functions to insert parents and correctly order, from MasterBayes.
+full_pedig=orderPed(full_pedig)
+Ainv=inverseA(full_pedig)$Ainv
+
+#make sure all covariates are in the right format
+larvae$R1.ID.=as.factor(larvae$R1.ID.)
+larvae$R2.ID.=as.factor(larvae$R2.ID.)
+larvae$Date=as.Date(larvae$Date, "%d-%b-%y")
+larvae$PostSwitch=as.factor(larvae$PostSwitch)
+larvae$Parental.tank=as.factor(larvae$Parental.tank)
+# #scale SL to N(0,1)
+# larvae$SL=scale(larvae$SL,center=TRUE)
+
+#phenotype data frame
+phens=dplyr::select(larvae,animal=larvalID,speed=speed, length=SL, clutch=Clutch, dam=R1.ID., sire=R2.ID., tank=Parental.tank, age=Age.at.hatch)
+#add empty rows to phens for parents
+parents=subset(full_pedig,is.na(dam))
+parents=transmute(parents,animal=id,speed=as.numeric(dam),length=as.numeric(dam),clutch=NA,dam=NA,sire=NA,tank=NA,age=1)
+phens=as.data.frame(phens)
+phens=rbind(parents,phens)
+
+#clean up a bit: get just the potentially relevant columns of larvae
+larvae_cov=dplyr::select(larvae,larvalID,SL,speed,Clutch,Date,R1.ID.,R2.ID.,Parental.tank,PostSwitch,Age.at.hatch,R1_SL,R2_SL,Notes)
+```
+
+```{r}
+#send to Katrina and Malin
+nj=read.csv('NJ_speed.csv')
+nj=nj[1:1144,1:11]
+nj=as.data.frame(nj)
+nj=mutate(nj,animal=Clutch+.01*Larva) #create unique identifier for each larva
+
+kat=subset(phens,is.na(clutch)!=TRUE)
+kat=dplyr::select(kat,-age)
+
+kat2=merge(kat,nj,by='animal',all.x=TRUE,all.y=TRUE)
+kat2=dplyr::select(kat2,animal,speed,length,dam,sire,tank,date,Send.to.NJ,Group)
+kat2=kat2[1:1432,]
+kat3=kat2[-c(47:60),]
+kat3=rename(kat3,larvalID=animal)
+kat3=rename(kat3,Ucrit=speed,SL=length)
+
+write.csv(kat3,'larvalh2.csv')
+```
+
+Optionally, trim the data to include larvae with at least one type of half-sib (maternal or paternal) or only larvae with both types of half-sibs.  !!Check this before using -- might need updating
+```{r trim, echo=FALSE}
+#trim to larvae with at least one half-sib clutch in the dataset
+mothers_good=read.csv('mothers_good.csv',header=FALSE)
+fathers_good=(read.csv('fathers_good.csv',header=FALSE))
+colnames(mothers_good)=c('R1','Good')
+colnames(fathers_good)=c('R2','Good')
+mothers_good=subset(mothers_good,Good==1)$R1
+fathers_good=subset(fathers_good,Good==1)$R2
+
+metadata_trim=subset(metadata,R1.ID.%in%mothers_good|R2.ID.%in%fathers_good)
+larvae_trim=subset(larvae,R1.ID.%in%mothers_good|R2.ID.%in%fathers_good)
+#write.csv(larvae_trim,'larvae_trim.csv')
+#write.csv(metadata_trim,'metadata_trim.csv')
+
+#trim to larvae with both types of half-sib in the dataset
+mothers_bothgood=c(5,6,9,10,13,18,22,30,59,66,70,114)
+fathers_bothgood=c(38,96,97,98,103,108,111,115,131,156,165,171)
+metadata_trimtwice=subset(metadata,R1.ID.%in%mothers_bothgood&R2.ID.%in%fathers_bothgood)
+larvae_trimtwice=subset(larvae,R1.ID.%in%mothers_bothgood&R2.ID.%in%fathers_bothgood)
+#write.csv(larvae_trimtwice,'larvae_trim_stringent.csv')
+#write.csv(metadata_trimtwice,'metadata_trim_stringent.csv')
+
+#subsets in which fathers are nested within mothers
+mothers_top=c(5,9,114,22,18,29,30,78,17,14,55)
+metadata_trim_moms=subset(metadata,R1.ID.%in%mothers_top)
+larvae_trim_moms=subset(larvae,R1.ID.%in%mothers_top)
+
+mothers_top2=c(6,70,10,13,59,74,66,78,17,14,55) #second of many possible subsets -- not disjoint from first
+metadata_trim_moms2=subset(metadata,R1.ID.%in%mothers_top2)
+larvae_trim_moms2=subset(larvae,R1.ID.%in%mothers_top2)
+
+#subsets in which mothers are nested within fathers
+fathers_top=c(108,97,156,165,115,122,96,95,162,175,142)
+metadata_trim_dads=subset(metadata,R2.ID.%in%fathers_top)
+larvae_trim_dads=subset(larvae,R2.ID.%in%fathers_top)
+
+fathers_top2=c(137,98,38,103,111,116,171,152,162,175,142) #second of many possible subsets -- not disjoint from first
+metadata_trim_dads2=subset(metadata,R2.ID.%in%fathers_top2)
+larvae_trim_dads2=subset(larvae,R2.ID.%in%fathers_top2)
+```
+
+## Univariate linear mixed model selection
+Using a LMM here might be a problem because the predictor variables (maternal ID, paternal ID, tank) are correlated with each other and are not independent of the random effect (clutch). (see Silk et al 2020, peril #5)  [But think through: what exactly do "correlation" and "independent" mean for categorical variables?]
+
+```{r}
+
+#-------------------------Standard Length model-----------------------------
+
+data=larvae
+
+SL_rand=lmer(SL~Age.at.hatch+(1|R1.ID./Clutch)+(1|R2.ID./Clutch),data=data)
+check_model(SL_rand)
+model_performance(SL_rand)
+
+ClutchVarR2 <- as.numeric(VarCorr(SL_rand)[["Clutch:R2.ID."]])
+ClutchVarR1 <- as.numeric(VarCorr(SL_rand)[["Clutch:R1.ID."]])
+VarR2 <- as.numeric(VarCorr(SL_rand)[["R2.ID."]])
+VarR1 <- as.numeric(VarCorr(SL_rand)[["R1.ID."]])
+residVar <- attr(VarCorr(SL_rand), "sc")^2
+totVar=ClutchVarR2+ClutchVarR1+VarR2+VarR1+residVar
+
+VarR1/totVar
+VarR2/totVar
+ClutchVarR1/totVar
+ClutchVarR2/totVar
+residVar/totVar
+
+SL_rand2=lmer(SL~Age.at.hatch+(1|R1.ID.)+(1|R2.ID.)+(1|Clutch),data=data)
+
+ClutchVar <- as.numeric(VarCorr(SL_rand2)[["Clutch"]])
+VarR2 <- as.numeric(VarCorr(SL_rand2)[["R2.ID."]])
+VarR1 <- as.numeric(VarCorr(SL_rand2)[["R1.ID."]])
+residVar <- attr(VarCorr(SL_rand2), "sc")^2
+totVar=ClutchVar+VarR2+VarR1+residVar
+
+VarR1/totVar
+VarR2/totVar
+ClutchVar/totVar
+residVar/totVar
+
+frequentist_var_props=c(ClutchVar/totVar,VarR1/totVar,VarR2/totVar,residVar/totVar)
+
+
+
+#-------------------------------forget all this -- parents should be random effects
+SL_max=lmer(SL~R1.ID.+R2.ID.+Parental.tank+Age.at.hatch+(1|Clutch),data=data) #model matrix rank-deficient; drops 29 columns
+
+SL_mom=lmer(SL~R1.ID.+Age.at.hatch+(1|Clutch),data=data)
+
+SL_test=lmer(SL~R1.ID.+R1_SL+Age.at.hatch+(1|Clutch),data=data)
+rownames(SL_test@vcov_beta)
+
+#SL_momonly=lmer(SL~R1.ID.+(1|Clutch),data=data)
+
+SL_dad=lmer(SL~R2.ID.+Age.at.hatch+(1|Clutch),data=data)
+
+#SL_dadonly=lmer(SL~R2.ID.+(1|Clutch),data=data)
+
+SL_tank=lmer(SL~Parental.tank+Age.at.hatch+(1|Clutch),data=data)
+
+SL_parents=lmer(SL~R1.ID.+R2.ID.+Age.at.hatch+(1|Clutch),data=data) #model matrix rank-deficient; drops 10 columns
+
+#has higher marginal R2 (random effects only), but lower conditional R2 (fixed and random) than a model with either parent separately. This seems weird, but maybe it's because R1 and R2 are collinear and terms get dropped?
+
+SL_age=lmer(SL~Age.at.hatch+(1|Clutch),data=data)
+
+SL_min=lmer(SL~(1|Clutch),data=data)
+
+step(SL_max) #backward stepwise model selection (Satterthwaite vs K-R?)
+SL_opt=SL_mom
+
+#-----------Diagnostics------------
+check_model(SL_max) #collinearity in R1, R2 and tank
+check_model(SL_opt) #OK
+
+compare_performance(SL_mom,SL_dad,SL_tank,SL_parents,SL_max,SL_age,SL_min,rank=TRUE)
+
+#-----------------Interpretation-----------------------------
+summary(SL_opt)
+summary(SL_parents)
+```
+
+
+
+
+
+
+
+```{r}
+##-----------------UCrit---------------------------
+
+Ucrit_max=lmer(speed~R1.ID.+R2.ID.+Parental.tank+Age.at.hatch+(1|Clutch),data=larvae)
+
+Ucrit_mom=lmer(speed~R1.ID.+Age.at.hatch+(1|Clutch),data=larvae)
+
+Ucrit_momonly=lmer(speed~R1.ID.+(1|Clutch),data=larvae)
+
+Ucrit_dad=lmer(speed~R2.ID.+Age.at.hatch+(1|Clutch),data=larvae)
+
+Ucrit_dadonly=lmer(speed~R2.ID.+(1|Clutch),data=larvae)
+
+Ucrit_tank=lmer(speed~Parental.tank+Age.at.hatch+(1|Clutch),data=larvae)
+
+Ucrit_parents=lmer(speed~R1.ID.+R2.ID.+Age.at.hatch+(1|Clutch),data=larvae)
+
+#has higher marginal R2 (random effects only), but lower conditional R2 (fixed and random) than a model with either parent separately. This seems weird, but maybe it's because R1 and R2 are collinear and terms get dropped?
+
+Ucrit_age=lmer(speed~Age.at.hatch+(1|Clutch),data=larvae)
+
+Ucrit_min=lmer(speed~(1|Clutch),data=larvae)
+
+#-----------Diagnostics------------
+check_model(SL_max) #collinearity in R1, R2 and tank
+check_model(SL_opt)
+check_model(SL_min)
+
+
+compare_performance(Ucrit_mom,Ucrit_dad,Ucrit_tank,Ucrit_parents,Ucrit_max,Ucrit_age,Ucrit_min,Ucrit_momonly,Ucrit_dadonly,rank=TRUE)
+#marginal R2: percent variance explained by fixed effects only
+#conditional R2: percent variance explained by whole model (fixed and random)
+
+
+
+
+Ucrit_model=lmer(speed~R1.ID.+R2.ID.+Parental.tank+R1_SL+R2_SL+Age.at.hatch+(1|Clutch),data=larvae_trimtwice)
+step(Ucrit_model) #backward stepwise model selection
+## For Ucrit, everything's eliminated (except clutch). This matches with the animal model -- all similarity among larvae captured by these explanatory variables can be gotten from clutch. Once clutch is accounted for, no additional explanatory power from relatedness (i.e., sharing a mother or father)
+Ucrit_opt=lmer(speed~(1|Clutch),data=larvae)
+Ucrit_opt_summ=summary(Ucrit_opt)
+Ucrit_opt_summ
+```
+
+##Animal model
+I don't think it's appropriate to include parental effects terms in here. Because, in this study design, relatedness is equivalent to sharing a mother, a father, or both. i.e., breeding value and parental effects are collinear (?) When parental effects are included, they absorb the variance previously explained by relatedness (i.e., VA)
+
+
+### SL:animal model
+Model: y=a+c+e  (a=additive genetic effect; c=clutch; e=residual)
+
+```{r, results='hide'}
+
+
+#Z = model.matrix(~animal+clutch,data=phens)
+
+#----------------------options for priors--------------------------------
+
+#parameter-expanded prior
+prior_expand = list(R = list(V = 1, nu = 0.002),
+             G = list(G1 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                      G2 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1))) 
+
+#from tuto_en; with residual edited (nu=0.002 instead of nu=1) to be proper
+prior_ext<-list(R=list(V=1,nu=0.002),
+                G=list(G1=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G2=list(V=1,nu=1,alpha.mu=0,alpha.V=1000)))
+plot(seq(0,1,.001),dinvgamma(seq(0,1,.001),alpha=0.5,beta=0.5),type='l',main="prior_ext")
+
+
+#inverse gamma prior
+prior_invgamma = list(R = list(V = 1, nu = 0.002),
+             G = list(G1 = list(V = 1,nu = .002),
+                      G2 = list(V = 1,nu = .002)))
+plot(seq(0,1,.001),dinvgamma(seq(0,1,.001),alpha=0.001,beta=0.001),type='l',main="prior_invgamma")
+
+#gentler inverse gamma prior
+prior_invgamma2 = list(R = list(V = 1, nu = 0.02),
+             G = list(G1 = list(V = 1,nu = .02),
+                      G2 = list(V = 1,nu = .02),
+                      G3 = list(V = 1,nu = .02),
+                      G4 = list(V = 1,nu = .02)))
+plot(seq(0,1,.001),dinvgamma(seq(0,1,.001),alpha=0.01,beta=0.01),type='l',main="prior_invgamma2")
+
+
+#flat prior
+prior_flat = list(R = list(V = 1, nu=1),
+             G = list(G1 = list(V = 1e-10,nu = -1),
+                      G2 = list(V = 1e-10,nu = -1)))
+
+#-------------------------------no animal model----------------------------------
+
+prior_noanim=prior_invgamma2 = list(R = list(V = 1, nu = 0.002),
+             G = list(G1 = list(V = 1,nu = .002),
+                      G2 = list(V = 1,nu = .002),
+                      G3 = list(V = 1,nu = .002)))
+
+
+model_noanim=MCMCglmm(length ~ 1+age, random=~clutch+dam+sire,prior=prior_noanim,data=phens,nitt=100000,burnin=100,thin=10)
+model=model_noanim
+
+
+#--------------Gelman-Rubin diagnostic
+
+start1=list(R=runif(1),G=c(runif(1),runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1),runif(1)))
+model_noanim1=MCMCglmm(length ~ 1, random=~clutch+dam+sire,prior=prior_noanim,
+                       data=phens,nitt=100000,burnin=100,thin=10,
+                       start=start1)
+model_noanim2=MCMCglmm(length ~ 1, random=~clutch+dam+sire,prior=prior_noanim,
+                       data=phens,nitt=100000,burnin=100,thin=10,
+                       start=start2)
+
+intercept_gel=mcmc.list(model_noanim1$Sol,model_noanim2$Sol)
+clutch_gel=mcmc.list(model_noanim1$VCV[,'clutch'],model_noanim2$VCV[,'clutch'])
+dam_gel=mcmc.list(model_noanim1$VCV[,'dam'],model_noanim2$VCV[,'dam'])
+sire_gel=mcmc.list(model_noanim1$VCV[,'sire'],model_noanim2$VCV[,'sire'])
+units_gel=mcmc.list(model_noanim1$VCV[,'units'],model_noanim2$VCV[,'units'])
+
+par(mfrow=c(3,2))
+gelman.plot(intercept_gel)
+gelman.plot(clutch_gel,main="clutch")
+gelman.plot(dam_gel,main="dam")
+gelman.plot(sire_gel,main="sire")
+gelman.plot(units_gel,main="units")
+
+#-----------------------------------------------
+
+model=model_noanim
+
+v_clutch = model$VCV[, "clutch"]/
+  (model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+v_dam = model$VCV[, "dam"]/
+  (model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+v_sire = model$VCV[, "sire"]/
+  (model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+v_units = model$VCV[, "units"]/
+  (model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+
+#--------------------nice plot of posteriors----------------
+
+var_noanim=rbind(v_clutch,v_dam,v_sire,v_units)
+var_noanim=t(var_noanim)
+var_noanim=as.matrix(var_noanim)
+
+mcmc_areas(var_noanim,prob=0.95,area_method='equal height')
+
+#--------------------------------------------
+
+
+#create a data frame with estimates of the proportion of variance due to each effect: clutch, dam, sire, units
+variances=data.frame(mean=mean(v_clutch),lower95=HPDinterval(v_clutch)[1,1],upper95=HPDinterval(v_clutch)[1,2],sampsize=effectiveSize(v_clutch))
+variances=add_row(variances,mean=mean(v_dam),lower95=HPDinterval(v_dam)[1,1],upper95=HPDinterval(v_dam)[1,2],sampsize=effectiveSize(v_dam))
+variances=add_row(variances,mean=mean(v_sire),lower95=HPDinterval(v_sire)[1,1],upper95=HPDinterval(v_sire)[1,2],sampsize=effectiveSize(v_sire))
+variances=add_row(variances,mean=mean(v_units),lower95=HPDinterval(v_units)[1,1],upper95=HPDinterval(v_units)[1,2],sampsize=effectiveSize(v_units))
+rownames(variances)=c('clutch','dam','sire','units')
+
+variances_noanim=variances
+
+
+
+plot_noanim= ggplot(variances_noanim, aes(x=rownames(variances_noanim),y=mean,ymin=0,ymax=1))+
+  geom_point()+
+  geom_errorbar(aes(ymin=lower95,ymax=upper95),width=.3)+
+  xlab('source of variance')+
+  ylab('proportion of variance (mean+/- Bayesian 95%CI')+
+  geom_point(aes(x=rownames(variances_noanim),y=frequentist_var_props,color='Frequentist estimate'),color='blue')
+
+```
+#### Animal, dam and sire
+With animal model:
+```{r}
+#---------------------with animal model-------------------------
+
+#parameter-expanded prior mixes fine; Va just equals zero
+prior_expand = list(R = list(V = 1, nu = 0.002),
+             G = list(G1 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                      G2 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                      G3 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                      G4 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1))) 
+
+#from tuto_en; with residual edited (nu=0.002 instead of nu=1) to be proper
+prior_ext<-list(R=list(V=1,nu=0.002),
+                G=list(G1=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G2=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G3=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G4=list(V=1,nu=1,alpha.mu=0,alpha.V=1000)))
+
+#inverse gamma prior
+#passes Gelman-Rubin diagnostic after 100000 iterations, thin 10
+prior_invgamma = list(R = list(V = 1, nu = 0.002),
+             G = list(G1 = list(V = 1,nu = .002),
+                      G2 = list(V = 1,nu = .002),
+                      G3 = list(V = 1,nu = .002),
+                      G4 = list(V = 1,nu = .002)))
+
+prior_invgamma2 = list(R = list(V = 1, nu = 0.02),
+             G = list(G1 = list(V = 1,nu = .02),
+                      G2 = list(V = 1,nu = .02),
+                      G3 = list(V = 1,nu = .02),
+                      G4 = list(V = 1,nu = .02)))
+
+#flat prior
+prior_flat = list(R = list(V = 1, nu=1),
+             G = list(G1 = list(V = 1e-16,nu = -2),
+                      G2 = list(V = 1e-16,nu = -2),
+                      G3 = list(V = 1e-16,nu = -2),
+                      G4 = list(V = 1e-16,nu = -2)))
+
+model = MCMCglmm(length ~ 1+age, random =~animal+clutch+dam+sire,ginverse=list(animal=Ainv),
+                 prior = prior_expand, data = phens, nitt = 1000000,burnin = 10000, thin = 100)
+
+saveRDS(model,file='damsire_SL_10e6_expand.rda')
+###################
+###################
+###################
+damsire_SL_10e6_expand=readRDS('damsire_SL_10e6_expand.rda')
+
+
+#-----------------------Gelman-Rubin
+
+start1=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+model_anim1=MCMCglmm(length ~ 1, random =~animal+clutch+dam+sire,ginverse=list(animal=Ainv),
+                 prior = prior_invgamma2, data = phens, 
+                 nitt = 100000,burnin = 1000, thin = 10,start=start1)
+model_anim2=MCMCglmm(length ~ 1, random =~animal+clutch+dam+sire,ginverse=list(animal=Ainv),
+                 prior = prior_invgamma2, data = phens, 
+                 nitt = 100000,burnin = 1000, thin = 10,start=start2)
+
+intercept_gel=mcmc.list(model_anim1$Sol,model_anim2$Sol)
+clutch_gel=mcmc.list(model_anim1$VCV[,'clutch'],model_anim2$VCV[,'clutch'])
+dam_gel=mcmc.list(model_anim1$VCV[,'dam'],model_anim2$VCV[,'dam'])
+sire_gel=mcmc.list(model_anim1$VCV[,'sire'],model_anim2$VCV[,'sire'])
+units_gel=mcmc.list(model_anim1$VCV[,'units'],model_anim2$VCV[,'units'])
+animal_gel=mcmc.list(model_anim1$VCV[,'animal'],model_anim2$VCV[,'animal'])
+
+par(mfrow=c(3,2))
+gelman.plot(intercept_gel)
+gelman.plot(clutch_gel,main="clutch")
+gelman.plot(dam_gel,main="dam")
+gelman.plot(sire_gel,main="sire")
+gelman.plot(units_gel,main="units")
+gelman.plot(animal_gel,main="animal")
+
+gelman.diag(intercept_gel)
+gelman.diag(clutch_gel)
+gelman.diag(dam_gel)
+gelman.diag(sire_gel)
+gelman.diag(units_gel)
+gelman.diag(animal_gel)
+
+#also check autocorrelation plot
+autocorr.plot(model$VCV[,'animal'],lag.max=500)
+
+#-----------------------------------------
+
+#-----------------------Gelman-Rubin: try again with different prior
+#still <1.05ish by the end, but not as good as the previous prior
+#also, 95%CIs for variance components are giant using this prior
+prior_ext<-list(R=list(V=1,nu=0.002),
+                G=list(G1=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G2=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G3=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G4=list(V=1,nu=1,alpha.mu=0,alpha.V=1000)))
+
+start1=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+emodel_anim1=MCMCglmm(length ~ 1, random =~animal+clutch+dam+sire,ginverse=list(animal=Ainv),
+                 prior = prior_ext, data = phens, 
+                 nitt = 100000,burnin = 1000, thin = 10,start=start1)
+emodel_anim2=MCMCglmm(length ~ 1, random =~animal+clutch+dam+sire,ginverse=list(animal=Ainv),
+                 prior = prior_ext, data = phens, 
+                 nitt = 100000,burnin = 1000, thin = 10,start=start2)
+
+intercept_gel=mcmc.list(emodel_anim1$Sol,emodel_anim2$Sol)
+clutch_gel=mcmc.list(emodel_anim1$VCV[,'clutch'],emodel_anim2$VCV[,'clutch'])
+dam_gel=mcmc.list(emodel_anim1$VCV[,'dam'],emodel_anim2$VCV[,'dam'])
+sire_gel=mcmc.list(emodel_anim1$VCV[,'sire'],emodel_anim2$VCV[,'sire'])
+units_gel=mcmc.list(emodel_anim1$VCV[,'units'],emodel_anim2$VCV[,'units'])
+animal_gel=mcmc.list(emodel_anim1$VCV[,'animal'],emodel_anim2$VCV[,'animal'])
+
+par(mfrow=c(3,2))
+gelman.plot(intercept_gel)
+gelman.plot(clutch_gel,main="clutch")
+gelman.plot(dam_gel,main="dam")
+gelman.plot(sire_gel,main="sire")
+gelman.plot(units_gel,main="units")
+gelman.plot(animal_gel,main="animal")
+
+gelman.diag(intercept_gel)
+gelman.diag(clutch_gel)
+gelman.diag(dam_gel)
+gelman.diag(sire_gel)
+gelman.diag(units_gel)
+gelman.diag(animal_gel)
+
+#-----------------------------------------
+model=damsire_SL
+
+herit = model$VCV[, "animal"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+herit_SL=herit
+
+v_clutch = model$VCV[, "clutch"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+v_dam = model$VCV[, "dam"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+v_sire = model$VCV[, "sire"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+v_units = model$VCV[, "units"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+
+#--------------------nice plot of posteriors----------------
+
+#scaled to 1
+var_anim=rbind(herit,v_clutch,v_dam,v_sire,v_units)
+var_anim=t(var_anim)
+var_anim=as.matrix(var_anim)
+mcmc_areas(var_anim,prob=0.95,area_method='scaled height')+xlim(0,1)
+
+#in mm
+var_anim2=rbind(model$VCV[,'animal'],model$VCV[,'clutch'],model$VCV[,'dam'],model$VCV[,'sire'],model$VCV[,'units'])
+var_anim2=as.data.frame(t(var_anim2))
+colnames(var_anim2)=c('animal','clutch','dam','sire','units')
+mcmc_areas(var_anim2,prob=0.95,pars=c('animal','clutch','dam','sire','units'),area_method='equal height')
+```
+
+#####Priors vs posteriors
+```{r}
+### priors vs posteriors
+nu.=0.002
+V.=1
+
+colors=c('Prior'='blue','Posterior'='red')
+xlim=0.04
+
+#VA
+ggplot(as.data.frame(model$VCV), aes(x=animal)) + 
+  geom_density(aes(color='Posterior'))+
+  geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)),
+                y = 800*dinvgamma(seq(0,xlim,length.out=nrow(model$VCV)),alpha=nu./2,beta=nu.*V./2),
+                color='Prior'))+
+  labs(color='Legend')+
+  scale_color_manual(values=colors)+
+  ggtitle('VA of standard length (model includes parental effects)')
+
+
+y2scale=300
+#VA -- second y-axis scale
+ggplot(as.data.frame(model$VCV), aes(x=animal)) +
+  geom_density(aes(color='Posterior'))+
+  geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                y = y2scale*dinvgamma(seq(0,xlim,length.out=nrow(model$VCV)),alpha=nu./2,beta=nu.*V./2),
+                color='Prior'))+
+  scale_y_continuous(
+    name = 'Posterior density',
+    sec.axis = sec_axis(~./y2scale, name='Prior density')
+  )+
+  theme(
+    axis.title.y = element_text(color='red'),
+    axis.text.y = element_text(color='red'),
+    axis.title.y.right = element_text(color = 'blue'),
+    axis.text.y.right= element_text(color='blue')
+  )+
+  labs(color='Legend')+
+  scale_color_manual(values=colors)+
+  ggtitle('VA of body size (V=1, nu=0.002)')
+
+#VC
+ggplot(as.data.frame(model$VCV), aes(x=clutch)) + 
+  geom_density(aes(color='Posterior'))+
+  geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                y = dinvgamma(seq(0,xlim,length.out=nrow(model$VCV)),alpha=nu./2,beta=nu.*V./2),
+                color='Prior'))+
+  labs(color='Legend')+
+  scale_color_manual(values=colors)+
+  ggtitle('VC (clutch) of standard length (model includes parental effects)')
+
+#VD
+ggplot(as.data.frame(model$VCV), aes(x=dam)) +
+  geom_density(aes(color='Posterior'))+
+  geom_line(aes(x = seq(0,1.5,length.out=nrow(model$VCV)),
+                y = dinvgamma(seq(0,xlim,length.out=nrow(model$VCV)),alpha=nu./2,beta=nu.*V./2),
+                color='Prior'))+
+  labs(color='Legend')+
+  scale_color_manual(values=colors)+
+  ggtitle('Variance in standard length due to maternal effect')
+
+#VS
+ggplot(as.data.frame(model$VCV), aes(x=sire)) +
+  geom_density(aes(color='Posterior'))+
+  geom_line(aes(x = seq(0,1.5,length.out=nrow(model$VCV)),
+                y = dinvgamma(seq(0,xlim,length.out=nrow(model$VCV)),alpha=nu./2,beta=nu.*V./2),
+                color='Prior'))+
+  labs(color='Legend')+
+  scale_color_manual(values=colors)+
+  ggtitle('Variance in standard length due to paternal effect')
+
+
+#VE
+ggplot(as.data.frame(model$VCV), aes(x=units)) + 
+  geom_density(aes(color='Posterior'))+
+  geom_line(aes(x = seq(0,1.5,length.out=nrow(model$VCV)), 
+                y = dinvgamma(seq(0,xlim,length.out=nrow(model$VCV)),alpha=nu./2,beta=nu.*V./2),
+                color='Prior'))+
+  labs(color='Legend')+
+  scale_color_manual(values=colors)+
+  ggtitle('VE of standard length (model includes parental effects)')
+
+
+```
+####No dam or sire
+```{r}
+#----------------------------animal model, with no dam or sire
+#--------------------------------------------------------------------------------
+
+#inverse gamma prior: works fine
+prior_invgamma = list(R = list(V = 1, nu = 0.002),
+             G = list(G1 = list(V = 1,nu = .002),
+                      G2 = list(V = 1,nu = .002)))
+
+#parameter-expanded prior: less good
+prior_expand = list(R = list(V = 1, nu = 0.002),
+             G = list(G1 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                      G2 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1))) 
+
+model = MCMCglmm(length ~ 1+age, random =~animal+clutch,ginverse=list(animal=Ainv),
+                 prior = prior_invgamma, data = phens, nitt = 1000000,burnin = 10000, thin = 100)
+model_SL_anim_only=model
+
+saveRDS(model_SL_anim_only,file='nodamsire_SL_10e6.rda')
+###################
+###################
+###################
+nodamsire_SL_10e6=readRDS('nodamsire_SL_10e6.rda')
+
+#-----------------------Gelman-Rubin
+
+start1=list(R=runif(1),G=c(runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1)))
+model_anim1=MCMCglmm(length ~ 1, random =~animal+clutch,ginverse=list(animal=Ainv),
+                 prior = prior_invgamma, data = phens, 
+                 nitt = 100000,burnin = 1000, thin = 10,start=start1)
+model_anim2=MCMCglmm(length ~ 1, random =~animal+clutch,ginverse=list(animal=Ainv),
+                 prior = prior_invgamma, data = phens, 
+                 nitt = 100000,burnin = 1000, thin = 10,start=start2)
+
+intercept_gel=mcmc.list(model_anim1$Sol,model_anim2$Sol)
+clutch_gel=mcmc.list(model_anim1$VCV[,'clutch'],model_anim2$VCV[,'clutch'])
+units_gel=mcmc.list(model_anim1$VCV[,'units'],model_anim2$VCV[,'units'])
+animal_gel=mcmc.list(model_anim1$VCV[,'animal'],model_anim2$VCV[,'animal'])
+
+par(mfrow=c(3,2))
+gelman.plot(intercept_gel)
+gelman.plot(clutch_gel,main="clutch")
+gelman.plot(units_gel,main="units")
+gelman.plot(animal_gel,main="animal")
+
+gelman.diag(intercept_gel)
+gelman.diag(clutch_gel)
+gelman.diag(units_gel)
+gelman.diag(animal_gel)
+
+#also check autocorrelation plot
+autocorr.plot(model$VCV[,'animal'],lag.max=500)
+
+#-----------------------------------------
+herit = model$VCV[, "animal"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] + model$VCV[, "units"])
+v_clutch = model$VCV[, "clutch"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] + model$VCV[, "units"])
+v_units = model$VCV[, "units"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] + model$VCV[, "units"])
+
+v_dam=rep(0,length(v_units)) #dummy variables so the plot looks the same as the one with dam and sire
+v_sire=rep(0,length(v_units))
+
+var_anim=rbind(herit,v_clutch,v_dam,v_sire,v_units)
+var_anim=t(var_anim)
+var_anim=as.matrix(var_anim)
+mcmc_areas(var_anim,prob=0.95,area_method='equal height')+xlim(0,1)
+
+
+```
+
+#####Priors vs posteriors
+```{r}
+### priors vs posteriors
+nu.=0.002
+V.=1
+colors=c('Prior'='blue','Posterior'='red')
+xlim=0.04
+
+#VA
+ggplot(as.data.frame(model$VCV), aes(x=animal)) + 
+  geom_density(aes(color='Posterior'))+
+  geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                y = dinvgamma(seq(0,xlim,length.out=nrow(model$VCV)),alpha=nu./2,beta=nu.*V./2),
+                color='Prior'))+
+  labs(color='Legend')+
+  scale_color_manual(values=colors)+
+  ggtitle('VA of standard length (model does not include parental effects)')
+
+#VC
+ggplot(as.data.frame(model$VCV), aes(x=clutch)) + 
+  geom_density(aes(color='Posterior'))+
+  geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                y = dinvgamma(seq(0,xlim,length.out=nrow(model$VCV)),alpha=nu./2,beta=nu.*V./2),
+                color='Prior'))+
+  labs(color='Legend')+
+  scale_color_manual(values=colors)+
+  ggtitle('VC (clutch) of standard length (model does not include parental effects)')
+
+#VE
+ggplot(as.data.frame(model$VCV), aes(x=units)) + 
+  geom_density(aes(color='Posterior'))+
+  geom_line(aes(x = seq(0,1.5,length.out=nrow(model$VCV)), 
+                y = dinvgamma(seq(0,xlim,length.out=nrow(model$VCV)),alpha=nu./2,beta=nu.*V./2),
+                color='Prior'))+
+  labs(color='Legend')+
+  scale_color_manual(values=colors)+
+  ggtitle('VE of standard length (model does not include parental effects)')
+
+
+```
+
+
+#### Other plots and stuff
+```{r}
+#create a data frame with estimates of the proportion of variance due to each effect: clutch, dam, sire, units
+variances=data.frame(mean=mean(v_clutch),lower95=HPDinterval(v_clutch)[1,1],upper95=HPDinterval(v_clutch)[1,2],sampsize=effectiveSize(v_clutch))
+variances=add_row(variances,mean=mean(v_dam),lower95=HPDinterval(v_dam)[1,1],upper95=HPDinterval(v_dam)[1,2],sampsize=effectiveSize(v_dam))
+variances=add_row(variances,mean=mean(v_sire),lower95=HPDinterval(v_sire)[1,1],upper95=HPDinterval(v_sire)[1,2],sampsize=effectiveSize(v_sire))
+variances=add_row(variances,mean=mean(v_units),lower95=HPDinterval(v_units)[1,1],upper95=HPDinterval(v_units)[1,2],sampsize=effectiveSize(v_units))
+variances=add_row(variances,mean=mean(herit),lower95=HPDinterval(herit)[1,1],upper95=HPDinterval(herit)[1,2],sampsize=effectiveSize(herit))
+rownames(variances)=c('clutch','dam','sire','units','heritability')
+
+variances_anim=variances
+
+plot_anim=ggplot(variances_anim, aes(x=rownames(variances_anim),y=mean,ymin=0,ymax=1))+
+  geom_point()+
+  geom_errorbar(aes(ymin=lower95,ymax=upper95),width=.3)+
+  xlab('source of variance')+
+  ylab('proportion of variance (mean+/- Bayesian 95%CI')
+
+
+plot_noanim
+plot_anim
+
+#---------------------------------------------------------
+
+plot(model$VCV)
+plot(herit)
+summary(model)
+mean(herit)
+HPDinterval(herit)
+effectiveSize(herit)
+autocorr(herit)
+
+#---------------------plot prior and posterior--------------------
+
+nu.=0.002
+V.=1
+ggplot(as.data.frame(model$VCV), aes(x=animal)) + 
+  geom_histogram(binwidth=.0001)+
+  geom_line(aes(x = seq(0,0.02,length.out=9900), 
+                y = 400*dinvgamma(seq(0,0.02,length.out=9900),alpha=nu./2,beta=nu.*V./2)),
+            color = "blue")
+
+#----------------------add tank?-----------------------
+
+model = MCMCglmm(length ~ 1+age, random =~animal+clutch+dam+sire+tank,ginverse=list(animal=Ainv),
+                 prior = prior_invgamma, data = phens, nitt = 100000,burnin = 1000, thin = 10)
+
+herit = model$VCV[, "animal"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] +model$VCV[,"tank"] + model$VCV[, "units"])
+v_clutch = model$VCV[, "clutch"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] +model$VCV[,"tank"] + model$VCV[, "units"])
+v_dam = model$VCV[, "dam"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] +model$VCV[,"tank"] + model$VCV[, "units"])
+v_sire = model$VCV[, "sire"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] +model$VCV[,"tank"] + model$VCV[, "units"])
+v_tank = model$VCV[, "tank"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] +model$VCV[,"tank"] + model$VCV[, "units"])
+v_units = model$VCV[, "units"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] +model$VCV[,"tank"] + model$VCV[, "units"])
+
+
+var_anim=rbind(herit,v_clutch,v_dam,v_sire,v_tank,v_units)
+var_anim=t(var_anim)
+var_anim=as.matrix(var_anim)
+mcmc_areas(var_anim,prob=0.95)+xlim(0,1)
+mean(herit)
+
+```
+
+
+###Ucrit:animal model
+
+#### Animal, dam and sire
+```{r, results='hide'}
+#Z = model.matrix(~animal+clutch,data=phens)
+
+#---------------------priors--------------------------
+
+#parameter-expanded prior mixes fine; Va just equals zero
+prior_expand = list(R = list(V = 1, nu = 0.002),
+             G = list(G1 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                      G2 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                      G3 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                      G4 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1))) 
+
+#from tuto_en; with residual edited (nu=0.002 instead of nu=1) to be proper
+prior_ext<-list(R=list(V=1,nu=0.002),
+                G=list(G1=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G2=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G3=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G4=list(V=1,nu=1,alpha.mu=0,alpha.V=1000)))
+
+#inverse gamma prior
+prior_invgamma = list(R = list(V = 1, nu = 0.002),
+             G = list(G1 = list(V = 1,nu = .002),
+                      G2 = list(V = 1,nu = .002),
+                      G3 = list(V = 1,nu = .002),
+                      G4 = list(V = 1,nu = .002)))
+
+#gentler inverse gamma prior
+prior_invgamma2 = list(R = list(V = 1, nu = 0.02),
+             G = list(G1 = list(V = 1,nu = .02),
+                      G2 = list(V = 1,nu = .02)))
+
+#flat prior
+prior_flat = list(R = list(V = 1, nu=1),
+             G = list(G1 = list(V = 1e-10,nu = -1),
+                      G2 = list(V = 1e-10,nu = -1)))
+
+model = MCMCglmm(speed ~ 1+age, random =~animal+clutch+sire+dam,ginverse=list(animal=Ainv),
+                 prior = prior_expand, data = phens, nitt = 1000000,burnin = 10000, thin = 100)
+model_ucrit_anim=model
+
+saveRDS(model_ucrit_anim,file='damsire_ucrit.rda')
+###################
+###################
+###################
+damsire_ucrit=readRDS('damsire_ucrit.rda')
+
+
+#-----------------------Gelman-Rubin
+#inverse-gamma prior doesn't work here; Ucrit needs the parameter-expanded version
+
+start1=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+model_anim1=MCMCglmm(speed ~ 1, random =~animal+clutch+dam+sire,ginverse=list(animal=Ainv),
+                 prior = prior_expand, data = phens, 
+                 nitt = 100000,burnin = 1000, thin = 10,start=start1)
+model_anim2=MCMCglmm(speed ~ 1, random =~animal+clutch+dam+sire,ginverse=list(animal=Ainv),
+                 prior = prior_expand, data = phens, 
+                 nitt = 100000,burnin = 1000, thin = 10,start=start2)
+
+intercept_gel=mcmc.list(model_anim1$Sol,model_anim2$Sol)
+clutch_gel=mcmc.list(model_anim1$VCV[,'clutch'],model_anim2$VCV[,'clutch'])
+dam_gel=mcmc.list(model_anim1$VCV[,'dam'],model_anim2$VCV[,'dam'])
+sire_gel=mcmc.list(model_anim1$VCV[,'sire'],model_anim2$VCV[,'sire'])
+units_gel=mcmc.list(model_anim1$VCV[,'units'],model_anim2$VCV[,'units'])
+animal_gel=mcmc.list(model_anim1$VCV[,'animal'],model_anim2$VCV[,'animal'])
+
+par(mfrow=c(3,2))
+gelman.plot(intercept_gel)
+gelman.plot(clutch_gel,main="clutch")
+gelman.plot(dam_gel,main="dam")
+gelman.plot(sire_gel,main="sire")
+gelman.plot(units_gel,main="units")
+gelman.plot(animal_gel,main="animal")
+
+gelman.diag(intercept_gel)
+gelman.diag(clutch_gel)
+gelman.diag(dam_gel)
+gelman.diag(sire_gel)
+gelman.diag(units_gel)
+gelman.diag(animal_gel)
+
+#also check autocorrelation plot
+autocorr.plot(model$VCV[,'animal'],lag.max=500)
+
+#-----------------------------------------
+
+
+#-----------------------------------------
+
+
+herit = model$VCV[, "animal"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+herit_ucrit=herit
+
+v_clutch = model$VCV[, "clutch"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+v_dam = model$VCV[, "dam"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+v_sire = model$VCV[, "sire"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+v_units = model$VCV[, "units"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+
+#--------------------nice plot of posteriors----------------
+
+var_anim=rbind(herit,v_clutch,v_dam,v_sire,v_units)
+var_anim=t(var_anim)
+var_anim=as.matrix(var_anim)
+mcmc_areas(var_anim,prob=0.95)+xlim(0,1)
+
+
+#what if we don't scale by total variance?
+# var_anim2=rbind(model$VCV[,'animal'],model$VCV[,'clutch'],model$VCV[,'dam'],model$VCV[,'sire'],model$VCV[,'units'])
+# var_anim2=as.data.frame(t(var_anim2))
+# colnames(var_anim2)=c('animal','clutch','dam','sire','units')
+# aa=mcmc_areas(var_anim2,prob=0.95,pars=c('animal','clutch','dam','sire','units'))
+
+
+
+#--------------------------------------------
+# plot(model$VCV)
+# plot(herit)
+# summary(model)
+# mean(herit)
+# HPDinterval(herit)
+# effectiveSize(herit)
+# autocorr(herit)
+
+```
+
+
+#### No dam or sire
+```{r}
+#----------------------------animal model, with no dam or sire
+#--------------------------------------------------------------------------------
+
+#inverse gamma prior: trace of animal looks terrible
+prior_invgamma = list(R = list(V = 1, nu = 0.002),
+             G = list(G1 = list(V = 1,nu = .002),
+                      G2 = list(V = 1,nu = .002)))
+
+#parameter-expanded prior: trace plots look much better
+prior_expand = list(R = list(V = 1, nu = 0.002),
+             G = list(G1 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                      G2 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1))) 
+
+model = MCMCglmm(speed ~ 1+age, random =~animal+clutch,ginverse=list(animal=Ainv),
+                 prior = prior_expand, data = phens, nitt = 1000000,burnin = 10000, thin = 100)
+model_Ucrit_anim_only=model
+
+saveRDS(model_Ucrit_anim_only,file='nodamsire_ucrit.rda')
+###################
+###################
+###################
+nodamsire_ucrit=readRDS('nodamsire_ucrit.rda')
+
+
+# #-----------------------Gelman-Rubin
+# 
+# start1=list(R=runif(1,min=0,max=4),G=c(runif(1,min=0,max=4),runif(1,min=0,max=4)))
+# start2=list(R=runif(1,min=0,max=4),G=c(runif(1,min=0,max=4),runif(1,min=0,max=4)))
+# model_anim1=MCMCglmm(speed ~ 1+age, random =~animal+clutch,ginverse=list(animal=Ainv),
+#                  prior = prior_expand, data = phens, 
+#                  nitt = 100000,burnin = 1000, thin = 10,start=start1)
+# model_anim2=MCMCglmm(speed ~ 1+age, random =~animal+clutch,ginverse=list(animal=Ainv),
+#                  prior = prior_expand, data = phens, 
+#                  nitt = 100000,burnin = 1000, thin = 10,start=start2)
+# 
+# intercept_gel=mcmc.list(model_anim1$Sol,model_anim2$Sol)
+# clutch_gel=mcmc.list(model_anim1$VCV[,'clutch'],model_anim2$VCV[,'clutch'])
+# units_gel=mcmc.list(model_anim1$VCV[,'units'],model_anim2$VCV[,'units'])
+# animal_gel=mcmc.list(model_anim1$VCV[,'animal'],model_anim2$VCV[,'animal'])
+# 
+# par(mfrow=c(3,2))
+# gelman.plot(intercept_gel)
+# gelman.plot(clutch_gel,main="clutch")
+# gelman.plot(units_gel,main="units")
+# gelman.plot(animal_gel,main="animal")
+# 
+# gelman.diag(intercept_gel)
+# gelman.diag(clutch_gel)
+# gelman.diag(units_gel)
+# gelman.diag(animal_gel)
+# 
+# #also check autocorrelation plot
+# autocorr.plot(model$VCV[,'animal'],lag.max=500)
+
+#-----------------------------------------
+herit = model$VCV[, "animal"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] + model$VCV[, "units"])
+herit_ucrit_animonly=herit
+
+v_clutch = model$VCV[, "clutch"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] + model$VCV[, "units"])
+v_units = model$VCV[, "units"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] + model$VCV[, "units"])
+
+v_dam=rep(0,length(v_units)) #dummy variables so the plot looks the same as the one with dam and sire
+v_sire=rep(0,length(v_units))
+
+var_anim=rbind(herit,v_clutch,v_units)
+var_anim=t(var_anim)
+var_anim=as.matrix(var_anim)
+mcmc_areas(var_anim,prob=0.95)+xlim(0,1)
+```
+
+```{r}
+#-----------------compare posterior h2 for SL and Ucrit
+
+#full model
+h2s=rbind(herit_SL,herit_ucrit)
+h2s=t(h2s)
+h2s=as.matrix(h2s)
+mcmc_areas(h2s,prob=0.95)+xlim(0,1)
+
+#no dam or sire
+h2s_anim_only=rbind(herit_SL,herit_ucrit)
+h2s_anim_only=t(h2s_anim_only)
+h2s_anim_only=as.matrix(h2s_anim_only)
+mcmc_areas(h2s_anim_only,prob=0.95)+xlim(0,1)
+
+```
+
+## Pre-run models
+
+```{r}
+damsire_SL=readRDS('damsire_SL.rda')
+nodamsire_SL=readRDS('nodamsire_SL.rda')
+damsire_ucrit=readRDS('damsire_ucrit.rda')
+nodamsire_ucrit=readRDS('nodamsire_ucrit.rda')
+damsire_SL_10e6=readRDS('damsire_SL_10e6.rda')
+nodamsire_SL_10e6=readRDS('nodamsire_SL_10e6.rda')
+damsire_SL_10e6_g2=readRDS('damsire_SL_10e6_g2.rda')
+
+
+model=damsire_ucrit
+```
+
+### Calculated variables
+
+```{r}
+#dam and sire models
+herit = model$VCV[, "animal"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+v_clutch = model$VCV[, "clutch"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+v_dam = model$VCV[, "dam"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+v_sire = model$VCV[, "sire"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+v_units = model$VCV[, "units"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
+
+#no dam and sire models
+herit = model$VCV[, "animal"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] + model$VCV[, "units"])
+herit_SL=herit
+v_clutch = model$VCV[, "clutch"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] + model$VCV[, "units"])
+v_units = model$VCV[, "units"]/
+  (model$VCV[, "animal"] + model$VCV[,"clutch"] + model$VCV[, "units"])
+v_dam=rep(0,length(v_units)) #dummy variables so the plot looks the same as the one with dam and sire
+v_sire=rep(0,length(v_units))
+```
+
+### Diagnostics and output
+```{r}
+#diagnostics
+effectiveSize(herit)
+autocorr(herit)
+effectiveSize(model$VCV)
+autocorr(model$VCV)
+
+#output
+mean(herit)
+HPDinterval(herit)
+summary(model)
+
+#plots
+plot(model$VCV)
+plot(herit)
+```
+
+### Posterior plots
+```{r}
+#scaled to 1
+var_anim=rbind(herit,v_clutch,v_dam,v_sire,v_units)
+var_anim=t(var_anim)
+var_anim=as.matrix(var_anim)
+mcmc_areas(var_anim,prob=0.95,area_method='scaled height')+xlim(0,1)
+
+#in actual units
+var_anim2=rbind(model$VCV[,'animal'],model$VCV[,'clutch'],model$VCV[,'dam'],model$VCV[,'sire'],model$VCV[,'units'])
+var_anim2=as.data.frame(t(var_anim2))
+colnames(var_anim2)=c('animal','clutch','dam','sire','units')
+mcmc_areas(var_anim2,prob=0.95,pars=c('animal','clutch','dam','sire','units'),area_method='equal height')
+```
+
+
+## Bivariate animal model
+
+[speed,length]~ breeding value + clutch + error
+```{r}
+phens_norm=transmute(phens,animal=animal,speed=scale(speed),length=scale(length),clutch=clutch)
+psi=.2
+nu=2
+prior<-list(R=list(V=diag(2)/(0.002/1.002),nu=1.002),G=list(G1=list(V=diag(2)/(0.002/1.002),nu=1.002),G2=list(V=diag(2)/(0.002/1.002),nu=1.002)))
+#prior<-list(R=list(V=psi*diag(2),nu=nu),G=list(G1=list(V=psi*diag(2),nu=nu),G2=list(V=psi*diag(2),nu=nu)))
+#prior<-list(R=list(V=psi*diag(2),nu=nu),G=list(G1=list(V=psi*diag(2),nu=nu),G2=list(V=psi*diag(2),nu=nu)))
+
+modelmulti<-MCMCglmm(cbind(speed,length)~trait -1,random=~us(trait):animal+us(trait):clutch,
+rcov=~us(trait):units,family=c("gaussian","gaussian"),prior=prior,
+ginverse=list(animal=Ainv),data=phens,nitt=100000,burnin=10000,thin=10)
+
+summary(modelmulti)
+
+#Calculate heritability of each trait, and genetic correlation
+
+heritSL=modelmulti$VCV[,"traitlength:traitlength.animal"]/(modelmulti$VCV[,"traitlength:traitlength.animal"]+modelmulti$VCV[,"traitlength:traitlength.clutch"]+modelmulti$VCV[,"traitlength:traitlength.units"])
+plot(heritSL)
+mean(heritSL)
+
+heritUcrit=modelmulti$VCV[,"traitspeed:traitspeed.animal"]/(modelmulti$VCV[,"traitspeed:traitspeed.animal"]+modelmulti$VCV[,"traitspeed:traitspeed.clutch"]+modelmulti$VCV[,"traitspeed:traitspeed.units"])
+plot(heritUcrit)
+mean(heritUcrit)
+
+G_elements<-c(mean(modelmulti$VCV[,1]), mean(modelmulti$VCV[,2]), 
+              mean(modelmulti$VCV[,3]), mean(modelmulti$VCV[,4]))
+
+#I don't think these are right
+#VA_SL=modelmulti$VCV[,"traitlength:traitlength.animal"]
+#VA_Ucrit=modelmulti$VCV[,"traitspeed:traitspeed.animal"]
+
+corr.gen=modelmulti$VCV[,"traitspeed:traitlength.animal"]/sqrt(modelmulti$VCV[,"traitspeed:traitspeed.animal"]*modelmulti$VCV[,"traitlength:traitlength.animal"])
+plot(corr.gen)
+
+var_anim2=modelmulti$VCV[,"traitspeed:traitlength.animal"]
+var_anim2=as.data.frame(var_anim2)
+colnames(var_anim2)=c('genetic covariance')
+mcmc_areas(var_anim2,prob=0.95,pars=c('genetic covariance'),area_method='equal height')
+
+mcmc_areas(corr.gen)
+
+#Diagnostics: effective sample sizes, autocorrelation
+autocorr(heritSL)
+autocorr(heritUcrit)
+autocorr(corr.gen)
+```
+
+What I think the LMM tells us/doesn't tell us: there's collinearity in all the fixed and random effects (clutch, maternal ID, paternal ID, tank ID). That makes it hard to estimate the magnitude of any of those effects, separate from the others. So we can't have a lot of certainty about the significance/magnitude of, e.g., maternal vs paternal effects. BUT I think the conditional R2 (fixed and random effects) is still pretty trustworthy. So we can get a good sense of how much variance all of our predictors, together, explain. Answer: not that much! On the order of 30%. Which is interesting in itself.
+
+
+To do:
+-get p-values from LMM
+-explain where conditional R2 value comes from in LMM
+-quantify within-clutch variance as a proportion of the total?
+
+## Old stuff
+```{r}
+#plot priors and posteriors
+
+#VA
+
+prior_post_VA_data=as.data.frame(model$VCV[,'animal'])
+prior_data=data.frame(x=seq(0,1.5,0.0001),y=10*dinvgamma(seq(0,1.5,.0001),alpha=0.001,beta=0.001))
+colnames(prior_post_VA_data)=c('VA')
+post_mean=mean(prior_post_VA_data$VA)
+
+colors=c('Prior'='blue','Posterior'='red')
+ggplot(prior_post_VA_data, aes(x=VA),xlim=c(0,0.015))+
+  geom_density(aes(color='Posterior'))+
+  geom_line(data=prior_data,aes(x=x,y=y,color='Prior'))+
+  labs(color='Legend')+
+  scale_color_manual(values=colors)+
+  ggtitle('VA of standard length (model includes parental effects)')
+
+#VE
+
+prior_post_VE_data=as.data.frame(model$VCV[,'units'])
+prior_data=data.frame(x=seq(0,1.5,0.0001),y=10*dinvgamma(seq(0,1.5,.0001),alpha=0.001,beta=0.001))
+colnames(prior_post_VE_data)=c('VE')
+post_mean=mean(prior_post_VE_data$VE)
+
+colors=c('Prior'='blue','Posterior'='red')
+ggplot(prior_post_VE_data, aes(x=VE),xlim=c(0,0.015))+
+  geom_density(aes(color='Posterior'))+
+  geom_line(data=prior_data,aes(x=x,y=y,color='Prior'))+
+  labs(color='Legend')+
+  scale_color_manual(values=colors)+
+  ggtitle('VE of standard length (model includes parental effects)')
+
+```
