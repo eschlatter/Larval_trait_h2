@@ -138,152 +138,50 @@ prior_flat_params <- list(V = 1e-10,nu = -1)
 
 Plot them (when possible):
 ```{r}
-#pick one
-param_list <- prior_expand_params
+#invgamma
+param_list <- prior_invgamma_params
 nu <- param_list$nu
 V <- param_list$V
-
 #corresponding shape and scale (invgamma) parameters
 shape=nu/2
 scale=nu*V/2
 
-xrange <- seq(0.0001,1,.0001)
+#invgamma2
+param_list.2 <- prior_invgamma2_params
+nu.2 <- param_list.2$nu
+V.2 <- param_list.2$V
+#corresponding shape and scale (invgamma) parameters
+shape.2=nu.2/2
+scale.2=nu.2*V.2/2
+
+xrange <- seq(0.001,1,.001)
 
 ggplot()+
-  geom_line(aes(x=xrange,y=MCMCpack::dinvgamma(xrange,shape,scale))) 
-
-
-
-
-#structure for plugging in the params to generate a full prior -- this is what MCMCglmm takes
-
-prior_structure <- list(R=list(V=1,nu=0.002),
-                      G=list(G1=param_list,
-                             G2=param_list))
-
+  geom_line(aes(x=xrange,y=MCMCpack::dinvgamma(xrange,shape,scale),
+                color='invgamma'))+
+  geom_line(aes(x=xrange,y=MCMCpack::dinvgamma(xrange,shape.2,scale.2),
+                color='invgamma2'))+
+  labs(x="sigma^2",y="probability",title='prior distributions')
 ```
-
-```{r}
-###scratch
-
-
-#inverse gamma prior
-prior_invgamma = list(R = list(V = 1, nu = 0.002),
-             G = list(G1 = list(V = 1,nu = .002),
-                      G2 = list(V = 1,nu = .002)))
-#corresponding shape and scale parameters
-sh_invgamma=0.002/2
-sc_invgamma=0.002*1/2
-
-distys <- data.frame(x=seq(0.001,1,0.001),y=NA,dist='invgamma')
-for(i in 1:nrow(distys)){distys$y[i]=diwish(distys$x[i],1,0.002)}
-
-y <- diwish(0.02,v=1,S=0.002)
-
-
-#plot them
-x <- seq(0,1,.001)
-
-ggplot()+
-  geom_line(aes(x=x, y=extraDistr::dinvgamma(x,alpha=0.001,beta=0.001)))+ #invgamma
-  geom_line(aes(x=x, y=MCMCpack::dinvgamma(x,shape=0.001,scale=0.001))) #invgamma with new pkg
-                   
-
-#Store them in a list so they're easy to access later
-#priors on the variances of each effect
-#inverse Wishart distribution
-
-priors_2effects=list(prior_expand,prior_ext,prior_invgamma,prior_invgamma2,prior_flat)
-
-#another list for priors when the model has more random effects -- same prior for each effect
-```
-
-
-
-
 
 
 ### SL:animal model
 Model: y=a+c+e  (a=additive genetic effect; c=clutch; e=residual)
 
-
-
 ```{r}
-#-------------------------------no animal model----------------------------------
+param_list <- prior_invgamma2_params
 
-prior_noanim=prior_invgamma2 = list(R = list(V = 1, nu = 0.002),
-             G = list(G1 = list(V = 1,nu = .002),
-                      G2 = list(V = 1,nu = .002),
-                      G3 = list(V = 1,nu = .002)))
+#structure for plugging in the params to generate a full prior -- this is what MCMCglmm takes
+prior <- list(R=param_list, #variance prior for residual
+              G=list(G1=param_list,  #variance priors for random effects
+                     G2=param_list))
 
+model=MCMCglmm(length ~ 1+age,
+                      random=~animal+clutch,
+                      prior=prior,
+                      data=phens,nitt=100000,burnin=1000,thin=10,verbose=FALSE)
+#I think the "missing values in random predictors" warning is just because the parents in phens don't have predictor values
 
-model_noanim=MCMCglmm(length ~ 1+age, random=~clutch+dam+sire,prior=prior_noanim,data=phens,nitt=100000,burnin=100,thin=10)
-model=model_noanim
-
-
-#--------------Gelman-Rubin diagnostic
-
-start1=list(R=runif(1),G=c(runif(1),runif(1),runif(1)))
-start2=list(R=runif(1),G=c(runif(1),runif(1),runif(1)))
-model_noanim1=MCMCglmm(length ~ 1, random=~clutch+dam+sire,prior=prior_noanim,
-                       data=phens,nitt=100000,burnin=100,thin=10,
-                       start=start1)
-model_noanim2=MCMCglmm(length ~ 1, random=~clutch+dam+sire,prior=prior_noanim,
-                       data=phens,nitt=100000,burnin=100,thin=10,
-                       start=start2)
-
-intercept_gel=mcmc.list(model_noanim1$Sol,model_noanim2$Sol)
-clutch_gel=mcmc.list(model_noanim1$VCV[,'clutch'],model_noanim2$VCV[,'clutch'])
-dam_gel=mcmc.list(model_noanim1$VCV[,'dam'],model_noanim2$VCV[,'dam'])
-sire_gel=mcmc.list(model_noanim1$VCV[,'sire'],model_noanim2$VCV[,'sire'])
-units_gel=mcmc.list(model_noanim1$VCV[,'units'],model_noanim2$VCV[,'units'])
-
-par(mfrow=c(3,2))
-gelman.plot(intercept_gel)
-gelman.plot(clutch_gel,main="clutch")
-gelman.plot(dam_gel,main="dam")
-gelman.plot(sire_gel,main="sire")
-gelman.plot(units_gel,main="units")
-
-#-----------------------------------------------
-
-model=model_noanim
-
-v_clutch = model$VCV[, "clutch"]/
-  (model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
-v_dam = model$VCV[, "dam"]/
-  (model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
-v_sire = model$VCV[, "sire"]/
-  (model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
-v_units = model$VCV[, "units"]/
-  (model$VCV[,"clutch"] +model$VCV[,"dam"]+model$VCV[,"sire"] + model$VCV[, "units"])
-
-#--------------------nice plot of posteriors----------------
-
-var_noanim=rbind(v_clutch,v_dam,v_sire,v_units)
-var_noanim=t(var_noanim)
-var_noanim=as.matrix(var_noanim)
-
-mcmc_areas(var_noanim,prob=0.95,area_method='equal height')
-
-#--------------------------------------------
-
-
-#create a data frame with estimates of the proportion of variance due to each effect: clutch, dam, sire, units
-variances=data.frame(mean=mean(v_clutch),lower95=HPDinterval(v_clutch)[1,1],upper95=HPDinterval(v_clutch)[1,2],sampsize=effectiveSize(v_clutch))
-variances=add_row(variances,mean=mean(v_dam),lower95=HPDinterval(v_dam)[1,1],upper95=HPDinterval(v_dam)[1,2],sampsize=effectiveSize(v_dam))
-variances=add_row(variances,mean=mean(v_sire),lower95=HPDinterval(v_sire)[1,1],upper95=HPDinterval(v_sire)[1,2],sampsize=effectiveSize(v_sire))
-variances=add_row(variances,mean=mean(v_units),lower95=HPDinterval(v_units)[1,1],upper95=HPDinterval(v_units)[1,2],sampsize=effectiveSize(v_units))
-rownames(variances)=c('clutch','dam','sire','units')
-
-variances_noanim=variances
-
-
-plot_noanim= ggplot(variances_noanim, aes(x=rownames(variances_noanim),y=mean,ymin=0,ymax=1))+
-  geom_point()+
-  geom_errorbar(aes(ymin=lower95,ymax=upper95),width=.3)+
-  xlab('source of variance')+
-  ylab('proportion of variance (mean+/- Bayesian 95%CI')+
-  geom_point(aes(x=rownames(variances_noanim),y=frequentist_var_props,color='Frequentist estimate'),color='blue')
-
+plot(model)
 ```
+

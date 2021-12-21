@@ -23,6 +23,12 @@ distys_scaled <- ymax*distys$y/max(distys$y) #scale it to have the same maximum 
 
 
 ggplot()+
-  #geom_line(aes(x=xrange, y=extraDistr::dinvgamma(xrange,alpha=shape,beta=scale)))+ #use extraDistr invgamma function
-  geom_line(aes(x=xrange,y=y_invgamma))#+ #equivalently, MCMCpack invgamma function
-#  geom_line(aes(x=xrange,y=distys_scaled),color='blue') #using diwish from MCMCpack -- NOT equivalent. much steeper.
+  #geom_line(aes(x=xrange, y=extraDistr::dinvgamma(xrange,alpha=shape,beta=scale)))+
+    # #use extraDistr invgamma function
+  geom_line(aes(x=xrange,y=y_invgamma))#+
+    #equivalently, MCMCpack invgamma function. 
+    #These two also match the plots in Hadfield course notes (p.12)
+
+#  geom_line(aes(x=xrange,y=distys_scaled),color='blue')
+    # #using diwish from MCMCpack -- NOT equivalent. much steeper.
+    # #(and peak is super high ~300 if you don't scale it)
