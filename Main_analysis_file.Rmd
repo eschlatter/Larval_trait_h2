@@ -9,6 +9,7 @@ output: html_document
 library(tidyverse)
 library(MasterBayes) #for pedigree functions
 library(MCMCglmm)
+library(MCMCpack) #for inverse wishart distributions
 library(extraDistr) #for inverse gamma distribution (plotting priors)
 ```
 
@@ -73,7 +74,11 @@ metadata <- subset(metadata,R1.ID.%in%mothers_trim & R2.ID.%in%fathers_trim)
 larvae <- subset(larvae,R1.ID.%in%mothers_trim & R2.ID.%in%fathers_trim)
 ```
 
-Create pedigree, Ainv and phens
+Create:
+  - pedigree (and full_pedig, including the parents)
+  - Ainv
+  - phens (animal, speed, length, covariates)
+
 ```{r}
 #pedigree and Ainv -- we'll need this later for heritability analysis
 pedigree <- dplyr::select(larvae,id=larvalID,dam=R1.ID.,sire=R2.ID.)
@@ -105,48 +110,98 @@ phens <- rbind(parents,phens)
 
 ## Animal model
 
+### Priors
+From Hadfield course notes (p.13):
+"The inverse gamma is a special case of the inverse Wishart, although it is parametrised using shape and scale, where nu = 2$*$shape and V = scale/shape (or shape = nu/2 and scale = nu$*$V/2 ). MCMCpack provides a density function (dinvgamma) for the inverse gamma distribution."
+
+"The distribution tends to a point mass on V as the degree of belief parameter, nu, goes to infinity." The mean is not define for nu<2.
+
+Several priors to try:
 ```{r priors, results='hide'}
 
 #parameter-expanded prior
-prior_expand = list(R = list(V = 1, nu = 0.002),
-             G = list(G1 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
-                      G2 = list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1))) 
+prior_expand_params <- list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1)
 
-#from tuto_en; with residual edited (nu=0.002 instead of nu=1) to be proper
-prior_ext<-list(R=list(V=1,nu=0.002),
-                G=list(G1=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
-                       G2=list(V=1,nu=1,alpha.mu=0,alpha.V=1000)))
-plot(seq(0,1,.001),dinvgamma(seq(0,1,.001),alpha=0.5,beta=0.5),type='l',main="prior_ext")
+#also parameter-expanded, from tuto_en; with residual edited (nu=0.002 instead of nu=1) to be proper
+prior_ext_params <- list(V=1,nu=1,alpha.mu=0,alpha.V=1000)
+
+#inverse gamma prior
+prior_invgamma_params <- list(V = 1,nu = .002)
+
+#gentler inverse gamma prior
+prior_invgamma2_params <- list(V = 1,nu = .02)
+
+#flat prior
+prior_flat_params <- list(V = 1e-10,nu = -1)
+```
+
+
+Plot them (when possible):
+```{r}
+#pick one
+param_list <- prior_expand_params
+nu <- param_list$nu
+V <- param_list$V
+
+#corresponding shape and scale (invgamma) parameters
+shape=nu/2
+scale=nu*V/2
+
+xrange <- seq(0.0001,1,.0001)
+
+ggplot()+
+  geom_line(aes(x=xrange,y=MCMCpack::dinvgamma(xrange,shape,scale))) 
+
+
+
+
+#structure for plugging in the params to generate a full prior -- this is what MCMCglmm takes
+
+prior_structure <- list(R=list(V=1,nu=0.002),
+                      G=list(G1=param_list,
+                             G2=param_list))
+
+```
+
+```{r}
+###scratch
 
 
 #inverse gamma prior
 prior_invgamma = list(R = list(V = 1, nu = 0.002),
              G = list(G1 = list(V = 1,nu = .002),
                       G2 = list(V = 1,nu = .002)))
-plot(seq(0,1,.001),dinvgamma(seq(0,1,.001),alpha=0.001,beta=0.001),type='l',main="prior_invgamma")
+#corresponding shape and scale parameters
+sh_invgamma=0.002/2
+sc_invgamma=0.002*1/2
 
-#gentler inverse gamma prior
-prior_invgamma2 = list(R = list(V = 1, nu = 0.02),
-             G = list(G1 = list(V = 1,nu = .02),
-                      G2 = list(V = 1,nu = .02)))
-plot(seq(0,1,.001),dinvgamma(seq(0,1,.001),alpha=0.01,beta=0.01),type='l',main="prior_invgamma2")
+distys <- data.frame(x=seq(0.001,1,0.001),y=NA,dist='invgamma')
+for(i in 1:nrow(distys)){distys$y[i]=diwish(distys$x[i],1,0.002)}
 
-
-#flat prior
-prior_flat = list(R = list(V = 1, nu=1),
-             G = list(G1 = list(V = 1e-10,nu = -1),
-                      G2 = list(V = 1e-10,nu = -1)))
+y <- diwish(0.02,v=1,S=0.002)
 
 
 #plot them
-priors <- ggplot()+
-  geom_line(aes(x=seq(0,1,.001), y=dinvgamma(seq(0,1,.001),alpha=0.01,beta=0.01))) #invgamma2
+x <- seq(0,1,.001)
+
+ggplot()+
+  geom_line(aes(x=x, y=extraDistr::dinvgamma(x,alpha=0.001,beta=0.001)))+ #invgamma
+  geom_line(aes(x=x, y=MCMCpack::dinvgamma(x,shape=0.001,scale=0.001))) #invgamma with new pkg
                    
 
 #Store them in a list so they're easy to access later
-priors_2Gs=list(prior_expand,prior_ext,prior_invgamma,prior_invgamma2,prior_flat)
+#priors on the variances of each effect
+#inverse Wishart distribution
 
+priors_2effects=list(prior_expand,prior_ext,prior_invgamma,prior_invgamma2,prior_flat)
+
+#another list for priors when the model has more random effects -- same prior for each effect
 ```
+
+
+
+
+
 
 ### SL:animal model
 Model: y=a+c+e  (a=additive genetic effect; c=clutch; e=residual)
