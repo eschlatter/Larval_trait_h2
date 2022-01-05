@@ -11,6 +11,7 @@ library(MasterBayes) #for pedigree functions
 library(MCMCglmm)
 library(MCMCpack) #for inverse wishart distributions
 library(extraDistr) #for inverse gamma distribution (plotting priors)
+library(bayesplot) #mcmc_areas plot function
 ```
 
 
@@ -100,14 +101,6 @@ phens <- as.data.frame(phens)
 phens <- rbind(parents,phens)
 ```
 
-
-```{r}
-#this needs parents' SL to work
-#get rid of extraneous columns
-# larvae_cov=dplyr::select(larvae,larvalID,SL,speed,Clutch,Date,R1.ID.,R2.ID.,
-#                          Parental.tank,PostSwitch,Age.at.hatch,R1_SL,R2_SL,Notes)
-```
-
 ## Animal model
 
 ### Priors
@@ -132,7 +125,7 @@ prior_invgamma_params <- list(V = 1,nu = .002)
 prior_invgamma2_params <- list(V = 1,nu = .02)
 
 #flat prior
-prior_flat_params <- list(V = 1e-10,nu = -1)
+prior_flat_params <- list(V = 1e-10,nu = -1) #trusting based on course notes that this is actually flat, because I can't tell what a negative nu means
 ```
 
 
@@ -170,18 +163,43 @@ Model: y=a+c+e  (a=additive genetic effect; c=clutch; e=residual)
 
 ```{r}
 param_list <- prior_invgamma2_params
+n_vars <- 2
+model_statement <- "animal+clutch"
+mcmc_iter=1000
+model_run <- function(param_list,n_vars,n_mcmc_iter){
+  #structure for plugging in the params to generate a full prior -- this is what MCMCglmm takes
+  
+  G <- list()
+  for(i in 1:n_vars){
+    varname <- paste("G",i,sep="")
+    G[[varname]] <- param_list
+    }
+  
+  prior <- list(R=param_list, #variance prior for residual
+                G=G)  #variance priors for random effects
 
-#structure for plugging in the params to generate a full prior -- this is what MCMCglmm takes
-prior <- list(R=param_list, #variance prior for residual
-              G=list(G1=param_list,  #variance priors for random effects
-                     G2=param_list))
-
-model=MCMCglmm(length ~ 1+age,
-                      random=~animal+clutch,
+model <- MCMCglmm(length ~ 1+age,
+                      random=formula(paste0('~',model_statement,sep='')),
                       prior=prior,
-                      data=phens,nitt=100000,burnin=1000,thin=10,verbose=FALSE)
+                      data=phens,nitt=n_mcmc_iter,burnin=round(.01*n_mcmc_iter),thin=10,verbose=TRUE)
 #I think the "missing values in random predictors" warning is just because the parents in phens don't have predictor values
 
 plot(model)
+
+#make a new scaled_vars dataframe, showing the proportional contribution of each source of variance to the total variance
+scaled_vars <- as.data.frame(model$VCV)
+for(i in 1:ncol(model$VCV)){
+  varname <- paste('scale',colnames(model$VCV)[i],sep='_')
+  scaled_vars[[varname]] <- model$VCV[,i]/rowSums(model$VCV)
+}
+#scaled_vars <- mutate(scaled_vars,tot=scale_animal+scale_clutch+scale_units) test that the scaled columns add up to 1
+scaled_vars <- dplyr::select(scaled_vars,starts_with('scale'))
+scaled_vars <- rename(scaled_vars,herit=scale_animal)
+
+#plot histograms of variance estimates
+mcmc_areas(scaled_vars,prob=0.95,area_method='scaled height') #scaled to 1
+#mcmc_areas(as.data.frame(model$VCV),prob=0.95,area_method='scaled height') #or in units of the phenotype (right? or squared units bc it's variance?)
+
+}
 ```
 
