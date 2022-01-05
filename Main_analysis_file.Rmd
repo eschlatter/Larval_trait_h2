@@ -162,11 +162,8 @@ ggplot()+
 Model: y=a+c+e  (a=additive genetic effect; c=clutch; e=residual)
 
 ```{r}
-param_list <- prior_invgamma2_params
-n_vars <- 2
-model_statement <- "animal+clutch"
-mcmc_iter=1000
-model_run <- function(param_list,n_vars,n_mcmc_iter){
+
+model_run <- function(param_list,model_statement,n_vars,n_mcmc_iter){
   #structure for plugging in the params to generate a full prior -- this is what MCMCglmm takes
   
   G <- list()
@@ -178,28 +175,30 @@ model_run <- function(param_list,n_vars,n_mcmc_iter){
   prior <- list(R=param_list, #variance prior for residual
                 G=G)  #variance priors for random effects
 
-model <- MCMCglmm(length ~ 1+age,
-                      random=formula(paste0('~',model_statement,sep='')),
-                      prior=prior,
-                      data=phens,nitt=n_mcmc_iter,burnin=round(.01*n_mcmc_iter),thin=10,verbose=TRUE)
-#I think the "missing values in random predictors" warning is just because the parents in phens don't have predictor values
+  model <- MCMCglmm(length ~ 1+age,
+                        random=formula(paste0('~',model_statement)),
+                        prior=prior,
+                        data=phens,nitt=n_mcmc_iter,burnin=round(.01*n_mcmc_iter),thin=10,verbose=TRUE)
+  #I think the "missing values in random predictors" warning is just because the parents in phens don't have predictor values
+  
+  plot(model)
+  
+  #make a new scaled_vars dataframe, showing the proportional contribution of each source of variance to the total variance
+  scaled_vars <- as.data.frame(model$VCV)
+  for(i in 1:ncol(model$VCV)){
+    varname <- paste('scale',colnames(model$VCV)[i],sep='_')
+    scaled_vars[[varname]] <- model$VCV[,i]/rowSums(model$VCV)
+  }
+  #scaled_vars <- mutate(scaled_vars,tot=scale_animal+scale_clutch+scale_units) test that the scaled columns add up to 1
+  scaled_vars <- dplyr::select(scaled_vars,starts_with('scale'))
+  scaled_vars <- rename(scaled_vars,herit=scale_animal)
+  
+  #plot histograms of variance estimates
+  mcmc_areas(scaled_vars,prob=0.95,area_method='scaled height') #scaled to 1
+  #mcmc_areas(as.data.frame(model$VCV),prob=0.95,area_method='scaled height') #or in units of the phenotype (right? or squared units bc it's variance?)
 
-plot(model)
-
-#make a new scaled_vars dataframe, showing the proportional contribution of each source of variance to the total variance
-scaled_vars <- as.data.frame(model$VCV)
-for(i in 1:ncol(model$VCV)){
-  varname <- paste('scale',colnames(model$VCV)[i],sep='_')
-  scaled_vars[[varname]] <- model$VCV[,i]/rowSums(model$VCV)
 }
-#scaled_vars <- mutate(scaled_vars,tot=scale_animal+scale_clutch+scale_units) test that the scaled columns add up to 1
-scaled_vars <- dplyr::select(scaled_vars,starts_with('scale'))
-scaled_vars <- rename(scaled_vars,herit=scale_animal)
 
-#plot histograms of variance estimates
-mcmc_areas(scaled_vars,prob=0.95,area_method='scaled height') #scaled to 1
-#mcmc_areas(as.data.frame(model$VCV),prob=0.95,area_method='scaled height') #or in units of the phenotype (right? or squared units bc it's variance?)
-
-}
+model_run(prior_invgamma2_params,"animal+clutch",2,1000)
 ```
 
