@@ -188,18 +188,6 @@ model_run <- function(param_list,model_statement,n_vars,n_mcmc_iter){
   #plot posteriors
   plot(model)
   
-  #make a new scaled_vars dataframe, showing the proportional contribution of each source of variance to the total variance
-  
-  
-#works, but doesn't output mcmc objects  
-  # scaled_vars <- as.data.frame(model$VCV)
-  # for(i in 1:ncol(model$VCV)){
-  #   varname <- paste('scale',colnames(model$VCV)[i],sep='_')
-  #   scaled_vars[[varname]] <- as.data.frame(model$VCV)[,i]/rowSums(as.data.frame(model$VCV))
-  # }
-  # scaled_vars <- dplyr::select(scaled_vars,starts_with('scale'))
-  # scaled_vars <- rename(scaled_vars,herit=scale_animal)
-
   #outputs proportional variances as new mcmc objects
   scaled_vars <- list()
   for(i in 1:ncol(model$VCV)){
@@ -225,9 +213,8 @@ model_run <- function(param_list,model_statement,n_vars,n_mcmc_iter){
   
     
   #plot histograms of variance estimates
-  mcmc_areas(scaled_vars,prob=0.95,area_method='scaled height') #scaled to 1
-  
-  
+  matrix_scaled_vars <- do.call(cbind,scaled_vars) #put all variables together into a matrix for plotting
+  mcmc_areas(matrix_scaled_vars,prob=0.95,area_method='scaled height') #scaled to 1
 
 }
 
