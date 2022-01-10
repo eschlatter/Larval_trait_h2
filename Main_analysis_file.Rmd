@@ -8,17 +8,14 @@ output: html_document
 ```{r}
 library(tidyverse)
 library(MasterBayes) #for pedigree functions
-library(MCMCglmm)
+library(MCMCglmm) #for running the model
 library(MCMCpack) #for inverse wishart distributions
-library(extraDistr) #for inverse gamma distribution (plotting priors)
 library(bayesplot) #mcmc_areas plot function
 ```
 
 ```{r}
 source("model_fns.R")
 ```
-
-
 
 ##Read in and process the data.
 
@@ -74,8 +71,8 @@ larvae <- larvae %>%
 Trim the dataset to larvae with both maternal and paternal half-sibs. 581 larvae from 12 mothers and 12 fathers.
 ```{r trim data}
 mothers_trim <- c(5,6,9,10,13,18,22,30,59,66,70,114) #mothers in the trimmed dataset
-#error in original data entry: father #137 is sometimes written #131
 fathers_trim <- c(38,96,97,98,103,108,111,115,137,156,165,171) #fathers in the trimmed dataset
+  #error in original data entry: father #137 is sometimes written #131
 metadata <- subset(metadata,R1.ID.%in%mothers_trim & R2.ID.%in%fathers_trim)
 larvae <- subset(larvae,R1.ID.%in%mothers_trim & R2.ID.%in%fathers_trim)
 ```
