@@ -5,7 +5,7 @@ date: "12/18/2021"
 output: html_document
 ---
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 library(tidyverse)
 library(MasterBayes) #for pedigree functions
 library(MCMCglmm) #for running the model
@@ -14,10 +14,10 @@ library(bayesplot) #mcmc_areas plot function
 ```
 
 ```{r}
-source("model_fns.R")
+source("../functions/model_fns.R")
 ```
 
-##Read in and process the data.
+## Read in and process the data.
 
 Creates the following objects we'll use going forward:
 
@@ -26,15 +26,15 @@ $\textbf{phens}$: a list of each larva and its swimming speed and clutch, plus o
 $\textbf{Ainv}$: the inverse of the relatedness matrix, A. In A, $A_{ij}=$probability of identity by descent of an allele in individuals i and j.
 ```{r data cleanup}
 #swim trial data
-larvae <- as.data.frame(read.csv('data/Larvae.csv',header=TRUE)) %>%
+larvae <- as.data.frame(read.csv('../data/Larvae.csv',header=TRUE)) %>%
   mutate(larvalID=Clutch+.01*Larva) #create unique identifier for each larva
 
 #clutch data
-metadata <- as.data.frame(read.csv('data/metadata.csv',header=TRUE))
+metadata <- as.data.frame(read.csv('../data/metadata.csv',header=TRUE))
 colnames(metadata)[1]='Clutch'
 
 #length data
-lengths <- as.data.frame(read.csv('data/Lengths.csv',header=TRUE)) %>%
+lengths <- as.data.frame(read.csv('../data/Lengths.csv',header=TRUE)) %>%
   mutate(larvalID=Clutch+.01*Larva) %>% #create unique identifier for each larva
   dplyr::select(-Clutch,-Larva) %>%
   rename(Measurer=Initials) %>%
@@ -78,8 +78,11 @@ larvae <- subset(larvae,R1.ID.%in%mothers_trim & R2.ID.%in%fathers_trim)
 ```
 
 Create:
+
   - pedigree (and full_pedig, including the parents)
+
   - Ainv
+
   - phens (animal, speed, length, covariates)
 
 ```{r}
