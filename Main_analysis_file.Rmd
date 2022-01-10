@@ -184,7 +184,11 @@ model_run <- function(param_list,model_statement,n_vars,n_mcmc_iter){
                         prior=prior,
                         data=phens,nitt=n_mcmc_iter,burnin=round(.01*n_mcmc_iter),thin=10,verbose=TRUE)
           #I think the "missing values in random predictors" warning is just because the parents in phens don't have predictor values
-  
+  return(model)
+}
+
+#function that takes an mcmc model object (output of MCMCglmm) and looks at the results
+model_results <- function(model){
   #plot posteriors
   plot(model)
   
@@ -194,7 +198,11 @@ model_run <- function(param_list,model_statement,n_vars,n_mcmc_iter){
     varname <- paste('scale',colnames(model$VCV)[i],sep='_')
     scaled_vars[[varname]] <- model$VCV[,i]/rowSums(as.data.frame(model$VCV)) #store them in a list
   }
-
+    
+  #plot histograms of variance estimates
+  matrix_scaled_vars <- do.call(cbind,scaled_vars) #put all variables together into a matrix for plotting
+  plot(mcmc_areas(matrix_scaled_vars,prob=0.95,area_method='scaled height')) #scaled to 1
+  
   #store results (mean, median, upper+lower95, effective sample size, last autocorr value)
   results=data.frame()
   for(i in 1:ncol(model$VCV)){
@@ -207,17 +215,17 @@ model_run <- function(param_list,model_statement,n_vars,n_mcmc_iter){
     results=rbind(results,v_results)
   }
   rownames(results)=colnames(model$VCV)
-  
-  results_long <- pivot_longer(results,mean:lastAutocorr,names_to='SummStat',values_to='Value') #in "long" format -- not sure yet which will be most useful
+  model_output <- list(diagnostic = dplyr::select(results,mean:lower95),estimates = dplyr::select(results,effSamp:lastAutocorr))
 
   
-    
-  #plot histograms of variance estimates
-  matrix_scaled_vars <- do.call(cbind,scaled_vars) #put all variables together into a matrix for plotting
-  mcmc_areas(matrix_scaled_vars,prob=0.95,area_method='scaled height') #scaled to 1
+  results_long <- pivot_longer(results,mean:lastAutocorr,names_to='SummStat',values_to='Value') #in "long" format -- not sure yet which will be most useful
+  
+ print(model_output)
+ return(model_output)
 
 }
 
-model_run(prior_invgamma2_params,"animal+clutch",2,1000)
+a <- model_run(prior_invgamma2_params,"animal+clutch",2,1000)
+res <- model_results(a)
 ```
 
