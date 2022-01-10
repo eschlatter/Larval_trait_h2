@@ -188,11 +188,37 @@ model_run <- function(param_list,model_statement,n_vars,n_mcmc_iter){
 }
 
 #function that takes an mcmc model object (output of MCMCglmm) and looks at the results
-model_results <- function(model){
-  #plot posteriors
+model_diagnostics <- function(model){
+  #trace and density plots
   plot(model)
   
-  #outputs proportional variances as new mcmc objects
+  #store convergence info by variable (original and scaled)
+  diagnostics=data.frame()
+    #original variables
+  for(i in 1:ncol(model$VCV)){
+    v_name <- colnames(model$VCV)[i]
+    v_mcmc <- model$VCV[,i]
+    v_diagnostics <- data.frame(variable=v_name,
+                                effSamp=effectiveSize(v_mcmc),
+                                firstAutocorr=autocorr(v_mcmc)[2],lastAutocorr=autocorr(v_mcmc)[nrow(autocorr(v_mcmc))])
+    diagnostics=rbind(diagnostics,v_diagnostics)
+  }
+    #scaled variables  
+  for(i in 1:ncol(matrix_scaled_vars)){
+    v_name <- colnames(matrix_scaled_vars)[i]
+    v_mcmc <- scaled_vars[[i]]
+    v_diagnostics <- data.frame(variable=v_name,
+                     effSamp=effectiveSize(v_mcmc),
+                     firstAutocorr=autocorr(v_mcmc)[2],lastAutocorr=autocorr(v_mcmc)[nrow(autocorr(v_mcmc))])
+    diagnostics=rbind(diagnostics,v_diagnostics)
+  }
+  rownames(diagnostics)=c(colnames(model$VCV),colnames(matrix_scaled_vars))
+  
+  return(diagnostics)
+}
+
+model_results <- function(model){
+  #proportional variances as new mcmc objects
   scaled_vars <- list()
   for(i in 1:ncol(model$VCV)){
     varname <- paste('scale',colnames(model$VCV)[i],sep='_')
@@ -203,29 +229,33 @@ model_results <- function(model){
   matrix_scaled_vars <- do.call(cbind,scaled_vars) #put all variables together into a matrix for plotting
   plot(mcmc_areas(matrix_scaled_vars,prob=0.95,area_method='scaled height')) #scaled to 1
   
-  #store results (mean, median, upper+lower95, effective sample size, last autocorr value)
-  results=data.frame()
+  #store estimates (mean, median, upper+lower95) for each variable (original and scaled)
+  estimates=data.frame()
+    #original variables
   for(i in 1:ncol(model$VCV)){
     v_name <- colnames(model$VCV)[i]
     v_mcmc <- model$VCV[,i]
-    v_results <- data.frame(variable=v_name,
-                            mean=mean(v_mcmc),median=median(v_mcmc),upper95=HPDinterval(v_mcmc)[,2],lower95=HPDinterval(v_mcmc)[,1],
-                            effSamp=effectiveSize(v_mcmc),
-                            firstAutocorr=autocorr(v_mcmc)[2],lastAutocorr=autocorr(v_mcmc)[nrow(autocorr(v_mcmc))])
-    results=rbind(results,v_results)
+    v_estimates <- data.frame(variable=v_name,
+                            mean=mean(v_mcmc),median=median(v_mcmc),upper95=HPDinterval(v_mcmc)[,2],lower95=HPDinterval(v_mcmc)[,1])
+    estimates=rbind(estimates,v_estimates)
   }
-  rownames(results)=colnames(model$VCV)
-  model_output <- list(diagnostic = dplyr::select(results,mean:lower95),estimates = dplyr::select(results,effSamp:lastAutocorr))
+    #scaled variables  
+  for(i in 1:ncol(matrix_scaled_vars)){
+    v_name <- colnames(matrix_scaled_vars)[i]
+    v_mcmc <- scaled_vars[[i]]
+    v_estimates <- data.frame(variable=v_name,
+                            mean=mean(v_mcmc),median=median(v_mcmc),upper95=HPDinterval(v_mcmc)[,2],lower95=HPDinterval(v_mcmc)[,1])
+    estimates=rbind(estimates,v_estimates)
+  }
+  rownames(estimates)=c(colnames(model$VCV),colnames(matrix_scaled_vars))
+  
+  #estimates_long <- pivot_longer(estimates,mean:lower95,names_to='SummStat',values_to='Value') #in "long" format -- not sure yet which will be most useful
 
-  
-  results_long <- pivot_longer(results,mean:lastAutocorr,names_to='SummStat',values_to='Value') #in "long" format -- not sure yet which will be most useful
-  
- print(model_output)
- return(model_output)
+ return(estimates)
 
 }
 
-a <- model_run(prior_invgamma2_params,"animal+clutch",2,1000)
+model <- model_run(prior_invgamma2_params,"animal+clutch",2,1000)
 res <- model_results(a)
 ```
 
