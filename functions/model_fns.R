@@ -1,15 +1,16 @@
-model_run <- function(param_list,model_statement,n_vars,n_mcmc_iter){
+model_run <- function(param_list,response,model_statement,n_vars,n_mcmc_iter){
   #structure for plugging in the params to generate a full prior -- this is what MCMCglmm takes
   G <- list()
   for(i in 1:n_vars){
     varname <- paste("G",i,sep="")
     G[[varname]] <- param_list
   }
-  prior <- list(R=param_list, #variance prior for residual
+  if(length(param_list)==2) R=param_list else R=list(V = 1,nu = .002) #set prior for residual
+  prior <- list(R=R, #variance prior for residual
                 G=G)  #variance priors for random effects
   
   #run the model
-  model <- MCMCglmm(length ~ 1+age,
+  model <- MCMCglmm(formula(paste0(response,'~','1+age')),
                     random=formula(paste0('~',model_statement)),
                     prior=prior,
                     data=phens,nitt=n_mcmc_iter,burnin=round(.01*n_mcmc_iter),thin=10,verbose=TRUE)

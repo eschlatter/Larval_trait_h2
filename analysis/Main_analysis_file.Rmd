@@ -15,6 +15,7 @@ library(bayesplot) #mcmc_areas plot function
 
 ```{r}
 source("../functions/model_fns.R")
+#load("../model_runs/")
 ```
 
 ## Read in and process the data.
@@ -69,7 +70,7 @@ larvae <- larvae %>%
   mutate(Parental.tank=as.factor(Parental.tank))
 ```
 Trim the dataset to larvae with both maternal and paternal half-sibs. 581 larvae from 12 mothers and 12 fathers.
-```{r trim data}
+```{r trim data, eval=FALSE}
 mothers_trim <- c(5,6,9,10,13,18,22,30,59,66,70,114) #mothers in the trimmed dataset
 fathers_trim <- c(38,96,97,98,103,108,111,115,137,156,165,171) #fathers in the trimmed dataset
   #error in original data entry: father #137 is sometimes written #131
@@ -162,19 +163,120 @@ ggplot()+
   labs(x="sigma^2",y="probability",title='prior distributions')
 ```
 
+## Run models
 
-### SL:animal model
-Model: y=a+c+e  (a=additive genetic effect; c=clutch; e=residual)
-
-```{r}
+```{r, eval=FALSE}
+##test to make sure it works
 param_list=prior_invgamma2_params
 model_statement="animal+clutch"
 n_vars=2 #not including the residual (units)
 n_mcmc_iter=100000
 
 
-model <- model_run(prior_invgamma2_params,"animal+clutch",2,1000)
+model <- model_run(prior_invgamma2_params,'speed',"animal+clutch",2,1000)
+save(model,file='../model_runs/test.RData')
 diagn <- model_diagnostics(model)
 results <- model_results(model)
 ```
+
+## Full dataset models
+
+```{r}
+### SL, no parental effects
+
+#prior_expand
+SL_noparent_fulldata_priorexpand_10e5 <- model_run(prior_expand_params,'length',"animal+clutch",2,100000)
+
+#prior_ext
+SL_noparent_fulldata_priorext_10e5 <- model_run(prior_ext_params,'length',"animal+clutch",2,100000)
+
+#invgamma
+SL_noparent_fulldata_invgamma_10e5 <- model_run(prior_invgamma_params,'length',"animal+clutch",2,100000)
+
+#invgamma2
+SL_noparent_fulldata_invgamma2_10e5 <- model_run(prior_invgamma2_params,'length',"animal+clutch",2,100000)
+
+#flat
+SL_noparent_fulldata_flatprior_10e5 <- model_run(prior_flat_params,'length',"animal+clutch",2,100000)
+
+#save them as a list
+SL_noparent_fulldata_10e5 <- list(SL_noparent_fulldata_priorexpand_10e5,SL_noparent_fulldata_priorext_10e5,
+                                  SL_noparent_fulldata_invgamma_10e5,SL_noparent_fulldata_invgamma2_10e5,
+                                  SL_noparent_fulldata_flatprior_10e5)
+save(SL_noparent_fulldata_10e5,file='../model_runs/SL_noparent_fulldata_10e5.RData')
+
+
+### SL, with parental effects
+
+#prior_expand
+SL_parent_fulldata_priorexpand_10e5 <- model_run(prior_expand_params,'length',"animal+clutch+dam+sire",4,100000)
+
+#prior_ext
+SL_parent_fulldata_priorext_10e5 <- model_run(prior_ext_params,'length',"animal+clutch+dam+sire",4,100000)
+
+#invgamma
+SL_parent_fulldata_invgamma_10e5 <- model_run(prior_invgamma_params,'length',"animal+clutch+dam+sire",4,100000)
+
+#invgamma2
+SL_parent_fulldata_invgamma2_10e5 <- model_run(prior_invgamma2_params,'length',"animal+clutch+dam+sire",4,100000)
+
+#flat
+SL_parent_fulldata_flatprior_10e5 <- model_run(prior_flat_params,'length',"animal+clutch+dam+sire",4,100000)
+
+#save them as a list
+SL_parent_fulldata_10e5 <- list(SL_parent_fulldata_priorexpand_10e5,SL_parent_fulldata_priorext_10e5,
+                                  SL_parent_fulldata_invgamma_10e5,SL_parent_fulldata_invgamma2_10e5,
+                                  SL_parent_fulldata_flatprior_10e5)
+save(SL_parent_fulldata_10e5,file='../model_runs/SL_parent_fulldata_10e5.RData')
+
+
+### Ucrit, no parental effects
+
+#prior_expand
+Ucrit_noparent_fulldata_priorexpand_10e5 <- model_run(prior_expand_params,'speed',"animal+clutch",2,100000)
+
+#prior_ext
+Ucrit_noparent_fulldata_priorext_10e5 <- model_run(prior_ext_params,'speed',"animal+clutch",2,100000)
+
+#invgamma
+Ucrit_noparent_fulldata_invgamma_10e5 <- model_run(prior_invgamma_params,'speed',"animal+clutch",2,100000)
+
+#invgamma2
+Ucrit_noparent_fulldata_invgamma2_10e5 <- model_run(prior_invgamma2_params,'speed',"animal+clutch",2,100000)
+
+#flat
+Ucrit_noparent_fulldata_flatprior_10e5 <- model_run(prior_flat_params,'speed',"animal+clutch",2,100000)
+
+#save them as a list
+Ucrit_noparent_fulldata_10e5 <- list(Ucrit_noparent_fulldata_priorexpand_10e5,Ucrit_noparent_fulldata_priorext_10e5,
+                                  Ucrit_noparent_fulldata_invgamma_10e5,Ucrit_noparent_fulldata_invgamma2_10e5,
+                                  Ucrit_noparent_fulldata_flatprior_10e5)
+save(Ucrit_noparent_fulldata_10e5,file='../model_runs/Ucrit_noparent_fulldata_10e5.RData')
+
+
+### Ucrit, with parental effects
+
+#prior_expand
+Ucrit_parent_fulldata_priorexpand_10e5 <- model_run(prior_expand_params,'speed',"animal+clutch+dam+sire",4,100000)
+
+#prior_ext
+Ucrit_parent_fulldata_priorext_10e5 <- model_run(prior_ext_params,'speed',"animal+clutch+dam+sire",4,100000)
+
+#invgamma
+Ucrit_parent_fulldata_invgamma_10e5 <- model_run(prior_invgamma_params,'speed',"animal+clutch+dam+sire",4,100000)
+
+#invgamma2
+Ucrit_parent_fulldata_invgamma2_10e5 <- model_run(prior_invgamma2_params,'speed',"animal+clutch+dam+sire",4,100000)
+
+#flat
+Ucrit_parent_fulldata_flatprior_10e5 <- model_run(prior_flat_params,'speed',"animal+clutch+dam+sire",4,100000)
+
+#save them as a list
+Ucrit_parent_fulldata_10e5 <- list(Ucrit_parent_fulldata_priorexpand_10e5,Ucrit_parent_fulldata_priorext_10e5,
+                                  Ucrit_parent_fulldata_invgamma_10e5,Ucrit_parent_fulldata_invgamma2_10e5,
+                                  Ucrit_parent_fulldata_flatprior_10e5)
+save(Ucrit_parent_fulldata_10e5,file='../model_runs/Ucrit_parent_fulldata_10e5.RData')
+
+```
+
 
