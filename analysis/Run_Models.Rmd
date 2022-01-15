@@ -60,7 +60,7 @@ V.2 <- param_list.2$V
 shape.2=nu.2/2
 scale.2=nu.2*V.2/2
 
-xrange <- seq(0.001,1,.001)
+xrange <- seq(0.001,.02,.001)
 
 ggplot()+
   geom_line(aes(x=xrange,y=MCMCpack::dinvgamma(xrange,shape,scale),
@@ -127,13 +127,12 @@ SL_parent_fulldata_invgamma_10e5 <- model_run(prior_invgamma_params,'length',"an
 #invgamma2
 SL_parent_fulldata_invgamma2_10e5 <- model_run(prior_invgamma2_params,'length',"animal+clutch+dam+sire",4,100000)
 
-#flat
-SL_parent_fulldata_flatprior_10e5 <- model_run(prior_flat_params,'length',"animal+clutch+dam+sire",4,100000)
+#flat -- doesn't work; remove it
+# SL_parent_fulldata_flatprior_10e5 <- model_run(prior_flat_params,'length',"animal+clutch+dam+sire",4,100000)
 
 #save them as a list
 SL_parent_fulldata_10e5 <- list(SL_parent_fulldata_priorexpand_10e5,SL_parent_fulldata_priorext_10e5,
-                                  SL_parent_fulldata_invgamma_10e5,SL_parent_fulldata_invgamma2_10e5,
-                                  SL_parent_fulldata_flatprior_10e5)
+                                  SL_parent_fulldata_invgamma_10e5,SL_parent_fulldata_invgamma2_10e5)
 save(SL_parent_fulldata_10e5,file='../model_runs/SL_parent_fulldata_10e5.RData')
 
 
@@ -316,8 +315,8 @@ SL_noparent_chain3 <- MCMCglmm(length~1+age,
                               ginverse=list(animal=Ainv),
                                 data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
 
-SL_noparent_chains <- list(SL_noparent_chain1,SL_noparent_chain2,SL_noparent_chain3)
-save(SL_noparent_chains,file='../model_runs/SL_noparent_chains.RData')
+SL_noparent_chains_fulldata <- list(SL_noparent_chain1,SL_noparent_chain2,SL_noparent_chain3)
+save(SL_noparent_chains_fulldata,file='../model_runs/SL_noparent_chains_fulldata.RData')
 ```
 
 

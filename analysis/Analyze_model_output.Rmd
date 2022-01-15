@@ -37,7 +37,7 @@ model_diagnostics(SL_noparent_fulldata_10e5[[3]])
 
 ```{r}
 model_diagnostics(SL_noparent_fulldata_10e5[[4]])
-#this one (invgamma2 prior) does the best, but still really not good
+#this one (invgamma2 prior) does the best, but still not great
 ```
 
 ```{r}
@@ -47,10 +47,12 @@ model_diagnostics(SL_noparent_fulldata_10e5[[5]])
 ### Trimmed data: SL, no parental effects
 
 ```{r}
+#gets stuck at 0
 model_diagnostics(SL_noparent_trimdata_10e5[[1]])
 ```
 
 ```{r}
+#gets stuck at 0
 model_diagnostics(SL_noparent_trimdata_10e5[[2]])
 ```
 
@@ -73,7 +75,8 @@ So, the invgamma2 prior with trimmed data is best for SL, no parental effects. L
 
 ```{r}
 #load 3 model runs (chains) generated in Run_Models.Rmd
-load("../model_runs/SL_noparent_chains.RData")
+load("../model_runs/SL_noparent_chains_trim.RData")
+SL_noparent_chains <- SL_noparent_chains_trim
 
 chain1 <- as.data.frame(SL_noparent_chains[[1]]$VCV)
 chain1$chain <- 1
