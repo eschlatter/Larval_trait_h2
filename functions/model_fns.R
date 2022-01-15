@@ -12,7 +12,7 @@ model_run <- function(param_list,response,model_statement,n_vars,n_mcmc_iter){
   #run the model
   model <- MCMCglmm(formula(paste0(response,'~','1+age')),
                     random=formula(paste0('~',model_statement)),
-                    prior=prior,
+                    prior=prior, ginverse=list(animal=Ainv),
                     data=phens,nitt=n_mcmc_iter,burnin=round(.01*n_mcmc_iter),thin=10,verbose=TRUE)
   #I think the "missing values in random predictors" warning is just because the parents in phens don't have predictor values
   return(model)
@@ -89,6 +89,46 @@ model_results <- function(model){
     estimates=rbind(estimates,v_estimates)
   }
   rownames(estimates)=c(colnames(model$VCV),colnames(matrix_scaled_vars))
+  
+  #estimates_long <- pivot_longer(estimates,mean:lower95,names_to='SummStat',values_to='Value') #in "long" format -- not sure yet which will be most useful
+  print(estimates)
+  return(estimates)
+  
+}
+
+#same as above function, but takes a dataframe as input; last column should be chain number
+model_results_df <- function(model_df){
+  #proportional variances as new mcmc objects
+  num_vars <- ncol(model_df)-1
+  scaled_vars <- list()
+  for(i in 1:num_vars){
+    varname <- paste('scale',colnames(model_df[i]),sep='_')
+    scaled_vars[[varname]] <- model_df[,i]/rowSums(as.data.frame(model_df[1:num_vars])) #store them in a list
+  }
+  
+  #plot histograms of variance estimates
+  matrix_scaled_vars <- do.call(cbind,scaled_vars) #put all variables together into a matrix for plotting
+  plot(mcmc_areas(matrix_scaled_vars,prob=0.95,area_method='scaled height')) #scaled to 1
+  
+  #store estimates (mean, median, upper+lower95) for each variable (original and scaled)
+  estimates=data.frame()
+  #original variables
+  for(i in 1:num_vars){
+    v_name <- colnames(model_df)[i]
+    v_mcmc <- as.mcmc(model_df[,i])
+    v_estimates <- data.frame(variable=v_name,
+                              mean=mean(v_mcmc),median=median(v_mcmc),upper95=HPDinterval(v_mcmc)[,2],lower95=HPDinterval(v_mcmc)[,1])
+    estimates=rbind(estimates,v_estimates)
+  }
+  #scaled variables  
+  for(i in 1:ncol(matrix_scaled_vars)){
+    v_name <- colnames(matrix_scaled_vars)[i]
+    v_mcmc <- as.mcmc(scaled_vars[[i]])
+    v_estimates <- data.frame(variable=v_name,
+                              mean=mean(v_mcmc),median=median(v_mcmc),upper95=HPDinterval(v_mcmc)[,2],lower95=HPDinterval(v_mcmc)[,1])
+    estimates=rbind(estimates,v_estimates)
+  }
+  rownames(estimates)=c(colnames(model_df[1:num_vars]),colnames(matrix_scaled_vars))
   
   #estimates_long <- pivot_longer(estimates,mean:lower95,names_to='SummStat',values_to='Value') #in "long" format -- not sure yet which will be most useful
   print(estimates)

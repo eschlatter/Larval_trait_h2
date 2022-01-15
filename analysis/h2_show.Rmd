@@ -41,13 +41,13 @@ $\textbf{phens}$: a list of each larva and its swimming speed and clutch (+other
 
 $\textbf{Ainv}$: the inverse of the relatedness matrix, A. In A, $A_{ij}=$probability of identity by descent of an allele in individuals i and j.
 ```{r}
-larvae=as.data.frame(read.csv('Larvae.csv',header=TRUE))
+larvae=as.data.frame(read.csv('../data/Larvae.csv',header=TRUE))
 larvae=mutate(larvae,larvalID=Clutch+.01*Larva) #create unique identifier for each larva
 
-metadata=as.data.frame(read.csv('metadata_SL.csv',header=TRUE))
+metadata=as.data.frame(read.csv('../data/Metadata.csv',header=TRUE))
 colnames(metadata)[1]='Clutch'
 
-lengths=as.data.frame(read.csv('Lengths.csv',header=TRUE))
+lengths=as.data.frame(read.csv('../data/Lengths.csv',header=TRUE))
 lengths=mutate(lengths,larvalID=Clutch+.01*Larva) #create unique identifier for each larva
 lengths=dplyr::select(lengths,-Clutch,-Larva)
 
