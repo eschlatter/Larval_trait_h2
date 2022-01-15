@@ -21,7 +21,7 @@ load("../model_runs/SL_noparent_trimdata_10e5.RData")
 
 ## SL, no parental effects
 
-### SL, no parental effects, full data
+### Full data: SL, no parental effects
 
 ```{r}
 model_diagnostics(SL_noparent_fulldata_10e5[[1]])
@@ -44,7 +44,7 @@ model_diagnostics(SL_noparent_fulldata_10e5[[4]])
 model_diagnostics(SL_noparent_fulldata_10e5[[5]])
 ```
 
-### SL, no parental effects, trimmed data
+### Trimmed data: SL, no parental effects
 
 ```{r}
 model_diagnostics(SL_noparent_trimdata_10e5[[1]])
@@ -72,6 +72,7 @@ model_diagnostics(SL_noparent_trimdata_10e5[[5]])
 So, the invgamma2 prior with trimmed data is best for SL, no parental effects. Let's generate 3 chains.
 
 ```{r}
+#load 3 model runs (chains) generated in Run_Models.Rmd
 load("../model_runs/SL_noparent_chains.RData")
 
 chain1 <- as.data.frame(SL_noparent_chains[[1]]$VCV)
@@ -84,7 +85,7 @@ chain3$chain <- 3
 SL_noparent_chains_df <- rbind(chain1,chain2,chain3)
 mcmc_trace(SL_noparent_chains_df)
 
-## Gelman-Rubin diagnostic: looks good
+## Gelman-Rubin diagnostic: looks good; upper limit is basically 1
 
 intercept_gel=mcmc.list(SL_noparent_chains[[1]]$Sol,SL_noparent_chains[[2]]$Sol,SL_noparent_chains[[3]]$Sol)
 clutch_gel=mcmc.list(SL_noparent_chains[[1]]$VCV[,'clutch'],SL_noparent_chains[[2]]$VCV[,'clutch'],SL_noparent_chains[[3]]$VCV[,'clutch'])
