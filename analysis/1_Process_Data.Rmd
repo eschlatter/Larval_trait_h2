@@ -1,0 +1,105 @@
+---
+title: "Process larval trait data"
+author: "E Schlatter"
+date: "1/14/2022"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(MasterBayes) #for pedigree functions
+library(MCMCglmm) #for running the model
+library(MCMCpack) #for inverse wishart distributions
+library(bayesplot) #mcmc_areas plot function
+```
+
+## Read in and process the data.
+
+Creates the following objects we'll use going forward:
+
+$\textbf{phens}$: a list of each larva and its swimming speed and clutch, plus other covariates to be added. (Each parent also has a row in this list, to be compatible with relatedness matrix, but its swimming speed and covariates are all NA.)
+
+$\textbf{Ainv}$: the inverse of the relatedness matrix, A. In A, $A_{ij}=$probability of identity by descent of an allele in individuals i and j.
+```{r data cleanup}
+#swim trial data
+larvae <- as.data.frame(read.csv('../data/Larvae.csv',header=TRUE)) %>%
+  mutate(larvalID=Clutch+.01*Larva) #create unique identifier for each larva
+
+#clutch data
+metadata <- as.data.frame(read.csv('../data/metadata.csv',header=TRUE))
+colnames(metadata)[1]='Clutch'
+
+#length data
+lengths <- as.data.frame(read.csv('../data/Lengths.csv',header=TRUE)) %>%
+  mutate(larvalID=Clutch+.01*Larva) %>% #create unique identifier for each larva
+  dplyr::select(-Clutch,-Larva) %>%
+  rename(Measurer=Initials) %>%
+  rename(SL=Average.length) %>%
+  mutate(SL=as.numeric(SL))  #this will give "NAs introduced by coercion" -- that's fine
+
+for(i in 1:nrow(larvae)){ #remove SL measurements for dead larvae; they're not accurate
+  larvae$SL[i]=ifelse(larvae$Dead.before.preservation.[i]==1,NA,larvae$SL[i])} 
+
+#merge swim trial and length data
+larvae <- merge(larvae,lengths,by='larvalID')
+
+larvae <- larvae %>% mutate('Time'=Time.min.+(1/60)*Time.sec.) %>% #add a Time column
+  subset(Clutch>4) %>% #first four clutches were practice, and we won't use them in the dataset
+  mutate(Clutch=as.factor(Clutch)) %>%
+  mutate(larvalID=as.factor(larvalID))
+
+#merge the larvae and metadata data frames, so metadata info is associated with each larva
+larvae <- merge(larvae,metadata,by='Clutch') %>%
+  dplyr::select(larvalID,everything()) #move larvalID to first column
+
+larvae <- larvae %>% subset(is.na(SL)==FALSE) %>% #remove larvae with no SL measurement
+  subset(is.na(Time)==FALSE) %>% #remove larvae with no speed measurement
+  mutate(speed=Time-2) #Ucrit is swim time minus 2cm/sec
+
+#make sure all covariates are in the right format
+larvae <- larvae %>%
+  mutate(R1.ID.=as.factor(R1.ID.)) %>%
+  mutate(R2.ID.=as.factor(R2.ID.)) %>%
+  mutate(Date=as.Date(Date, "%d-%b-%y")) %>%
+  mutate(PostSwitch=as.factor(PostSwitch)) %>%
+  mutate(Parental.tank=as.factor(Parental.tank))
+```
+Trim the dataset to larvae with both maternal and paternal half-sibs. 581 (637?) larvae from 12 mothers and 12 fathers.
+```{r trim data}
+mothers_trim <- c(5,6,9,10,13,18,22,30,59,66,70,114) #mothers in the trimmed dataset
+fathers_trim <- c(38,96,97,98,103,108,111,115,137,156,165,171) #fathers in the trimmed dataset
+  #error in original data entry: father #137 is sometimes written #131
+metadata <- subset(metadata,R1.ID.%in%mothers_trim & R2.ID.%in%fathers_trim)
+larvae <- subset(larvae,R1.ID.%in%mothers_trim & R2.ID.%in%fathers_trim)
+```
+
+Create:
+
+  - pedigree (and full_pedig, including the parents)
+
+  - Ainv
+
+  - phens (animal, speed, length, covariates)
+
+```{r}
+#pedigree and Ainv -- we'll need this later for heritability analysis
+pedigree <- dplyr::select(larvae,id=larvalID,dam=R1.ID.,sire=R2.ID.)
+
+#pedigree utility functions to insert parents and correctly order, from MasterBayes.
+full_pedig <- pedigree %>%
+  insertPed() %>%
+  orderPed()
+Ainv <- MCMCglmm::inverseA(full_pedig)$Ainv
+
+#phenotype data frame
+phens <- dplyr::select(larvae,animal=larvalID,speed=speed, length=SL, clutch=Clutch, 
+                       dam=R1.ID., sire=R2.ID., tank=Parental.tank, age=Age.at.hatch)
+  #add empty rows to phens for parents
+parents <- subset(full_pedig,is.na(dam)) %>%
+  transmute(animal=id,speed=as.numeric(dam),length=as.numeric(dam),clutch=NA,
+            dam=NA,sire=NA,tank=NA,age=1)
+phens <- as.data.frame(phens)
+phens <- rbind(parents,phens)
+
+#save(phens,file='../data/phens.RData')
+```
