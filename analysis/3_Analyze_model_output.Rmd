@@ -69,14 +69,57 @@ model_diagnostics(SL_noparent_trimdata_10e5[[4]])
 model_diagnostics(SL_noparent_trimdata_10e5[[5]])
 ```
 
-### Further convergence diagnostics for selected model
+### Further convergence diagnostics for selected models
+
+#### SL, no parental effects: invgamma2 prior
 
 So, the invgamma2 prior with trimmed data is best for SL, no parental effects. Let's generate 3 chains.
 
 ```{r}
 #load 3 model runs (chains) generated in Run_Models.Rmd
-load("../model_runs/SL_noparent_chains_fulldata.RData")
-SL_noparent_chains <- SL_noparent_chains_fulldata
+load("../model_runs/SL_noparent_chains_trim.RData")
+SL_noparent_chains <- SL_noparent_chains_trim
+
+chain1 <- as.data.frame(SL_noparent_chains[[1]]$VCV)
+chain1$chain <- 1
+chain2 <- as.data.frame(SL_noparent_chains[[2]]$VCV)
+chain2$chain <- 2
+chain3 <- as.data.frame(SL_noparent_chains[[3]]$VCV)
+chain3$chain <- 3
+
+SL_noparent_chains_df <- rbind(chain1,chain2,chain3)
+mcmc_trace(SL_noparent_chains_df)
+
+## Gelman-Rubin diagnostic: looks good; upper limit is basically 1
+
+intercept_gel=mcmc.list(SL_noparent_chains[[1]]$Sol,SL_noparent_chains[[2]]$Sol,SL_noparent_chains[[3]]$Sol)
+clutch_gel=mcmc.list(SL_noparent_chains[[1]]$VCV[,'clutch'],SL_noparent_chains[[2]]$VCV[,'clutch'],SL_noparent_chains[[3]]$VCV[,'clutch'])
+animal_gel=mcmc.list(SL_noparent_chains[[1]]$VCV[,'animal'],SL_noparent_chains[[2]]$VCV[,'animal'],SL_noparent_chains[[3]]$VCV[,'animal'])
+units_gel=mcmc.list(SL_noparent_chains[[1]]$VCV[,'units'],SL_noparent_chains[[2]]$VCV[,'units'],SL_noparent_chains[[3]]$VCV[,'units'])
+
+  #convergence diagnostic values (potential scale reduction factor):
+  #"Approximate convergence is diagnosed when the upper limit is close to 1"
+  #https://rdrr.io/cran/coda/man/gelman.diag.html
+  gelman.diag(intercept_gel)
+  gelman.diag(clutch_gel)
+  gelman.diag(animal_gel)
+  gelman.diag(units_gel)
+
+  #accompanying plots
+  par(mfrow=c(2,2))
+  gelman.plot(intercept_gel)
+  gelman.plot(clutch_gel,main="clutch")
+  gelman.plot(animal_gel,main="animal")
+  gelman.plot(units_gel,main="units")
+
+```
+
+#### SL, no parental effects: expanded prior
+
+```{r}
+#load 3 model runs (chains) generated in Run_Models.Rmd
+load("../model_runs/SL_noparent_expand_chains_trim.RData")
+SL_noparent_chains <- SL_noparent_expand_chains_trim
 
 chain1 <- as.data.frame(SL_noparent_chains[[1]]$VCV)
 chain1$chain <- 1
@@ -124,14 +167,14 @@ for(i in 1:3){
 
 mcmc_areas(scaled_vars,prob=0.95,area_method='scaled height')
 
-#one chain -- similar
-scaled_vars <- mcmc.list()
-for(i in 1:3){
-  varname <- paste('scale',colnames(chain2[i]),sep='_')
-  scaled_vars[[varname]] <- chain2[,i]/rowSums(chain2[,1:3]) #store them in a list
-}
-
-mcmc_areas(scaled_vars,prob=0.95,area_method='scaled height')
+# #one chain -- similar
+# scaled_vars <- mcmc.list()
+# for(i in 1:3){
+#   varname <- paste('scale',colnames(chain2[i]),sep='_')
+#   scaled_vars[[varname]] <- chain2[,i]/rowSums(chain2[,1:3]) #store them in a list
+# }
+# 
+# mcmc_areas(scaled_vars,prob=0.95,area_method='scaled height')
 
 model_results_df(SL_noparent_chains_df)
 ```
