@@ -1,0 +1,42 @@
+---
+title: "Analyze Model Output"
+author: "E Schlatter"
+date: "1/18/2022"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(MasterBayes) #for pedigree functions
+library(MCMCglmm) #for running the model
+library(MCMCpack) #for inverse wishart distributions
+library(bayesplot) #mcmc_areas plot function
+```
+
+```{r}
+source("../functions/model_fns.R")
+load("../model_runs/chains/SL_noparent_chains_trim.RData")
+load("../model_runs/chains/SL_parent_chains_trim.RData")
+load("../model_runs/chains/Ucrit_noparent_chains_trim.RData")
+load("../model_runs/chains/Ucrit_parent_chains_trim.RData")
+```
+
+## SL, no parental effects
+```{r}
+model_results_chains(SL_noparent_chains_trim)
+```
+
+## SL, parental effects
+```{r}
+model_results_chains(SL_parent_chains_trim)
+```
+
+## Ucrit, no parental effects
+```{r}
+model_results_chains(Ucrit_noparent_chains_trim)
+```
+
+## Ucrit, parental effects
+```{r}
+model_results_chains(Ucrit_parent_chains_trim)
+```

@@ -1,0 +1,194 @@
+---
+title: "Analyze model outputs"
+author: "E Schlatter"
+date: "1/14/2022"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(MasterBayes) #for pedigree functions
+library(MCMCglmm) #for running the model
+library(MCMCpack) #for inverse wishart distributions
+library(bayesplot) #mcmc_areas plot function
+```
+
+```{r}
+source("../functions/model_fns.R")
+```
+
+## SL, no parental effects
+Conclusion: use trimmed data and invgamma2 prior.
+
+```{r}
+load("../model_runs/SL_noparent_fulldata_10e5.RData")
+load("../model_runs/SL_noparent_trimdata_10e5.RData")
+```
+
+### Full data: SL, no parental effects
+
+```{r}
+model_diagnostics(SL_noparent_fulldata_10e5[[1]])
+```
+
+```{r}
+model_diagnostics(SL_noparent_fulldata_10e5[[2]])
+```
+
+```{r}
+model_diagnostics(SL_noparent_fulldata_10e5[[3]])
+```
+
+```{r}
+model_diagnostics(SL_noparent_fulldata_10e5[[4]])
+#this one (invgamma2 prior) does the best, but still not great
+```
+
+```{r}
+model_diagnostics(SL_noparent_fulldata_10e5[[5]])
+```
+
+
+### Trimmed data: SL, no parental effects
+
+```{r}
+#gets stuck at 0
+model_diagnostics(SL_noparent_trimdata_10e5[[1]])
+```
+
+```{r}
+#gets stuck at 0
+model_diagnostics(SL_noparent_trimdata_10e5[[2]])
+```
+
+```{r}
+model_diagnostics(SL_noparent_trimdata_10e5[[3]])
+```
+
+```{r}
+#this one (invgamma2) still does the best. A little better than before --> reason to use the trimmed data
+model_diagnostics(SL_noparent_trimdata_10e5[[4]])
+```
+
+```{r}
+model_diagnostics(SL_noparent_trimdata_10e5[[5]])
+```
+
+
+### Further convergence diagnostics for selected models
+Choosing between inverse gamma and parameter-expanded prior. Both mix acceptably well, but the parameter-expanded prior gives a bimodal posterior (one peak at 0, another near where the peak is found with the inverse gamma prior). 
+
+Gelman: "The other way a model can be difficult to fit is if its parameters are only weakly constrained by the posterior. With a small sample size (or, in a hierarchical model, a small number of groups), uncertainty in the hyperparameters can yield a posterior distribution of widely varying curvature, which leads to slowly mixing MCMC." (Stacking for Non-mixing Bayesian Computations, arXiv)
+
+Maybe the bimodal posterior is the result of adding an extra parameter (alpha) from the parameter-expanded prior? In that case, seems okay to just go with the inverse gamma prior.
+
+#### SL, no parental effects: invgamma2 prior
+```{r}
+#load 3 model runs (chains) generated in 2_Run_Models.Rmd
+load("../model_runs/chains/SL_noparent_chains_trim.RData")
+run_gelman_diagnostics(SL_noparent_chains_trim)
+```
+
+#### SL, no parental effects: expanded prior
+```{r}
+#load 3 model runs (chains) generated in Run_Models.Rmd
+load("../model_runs/chains/SL_noparent_expand_chains_trim.RData")
+run_gelman_diagnostics(SL_noparent_expand_chains_trim)
+```
+
+%%---------------------------------------------------------%%
+
+## SL, parental effects
+Keep the same trimmed data and inverse gamma prior as above (so we can compare the models with and without parental effects). Diagnostics look okay, so we can proceed to use this prior.
+
+```{r}
+load("../model_runs/SL_parent_trimdata_10e5.RData")
+```
+
+```{r}
+model_diagnostics(SL_parent_trimdata_10e5[[4]])
+```
+
+```{r}
+#load 3 model runs (chains) generated in 2_Run_Models.Rmd
+load("../model_runs/chains/SL_parent_chains_trim.RData")
+run_gelman_diagnostics(SL_parent_chains_trim)
+```
+
+
+
+
+## Ucrit, no parental effects
+
+```{r}
+load("../model_runs/Ucrit_noparent_fulldata_10e5.RData")
+load("../model_runs/Ucrit_noparent_trimdata_10e5.RData")
+```
+
+### Full data: Ucrit, no parental effects
+Inverse gamma priors are terrible; parameter expansion (we'll use prior_expand) is necessary. No big difference between full and trimmed dataset; stick with trimmed to be consistent w/SL.
+
+```{r}
+model_diagnostics(Ucrit_noparent_fulldata_10e5[[1]])
+```
+
+```{r}
+model_diagnostics(Ucrit_noparent_fulldata_10e5[[2]])
+```
+
+```{r}
+model_diagnostics(Ucrit_noparent_fulldata_10e5[[3]])
+```
+
+```{r}
+model_diagnostics(Ucrit_noparent_fulldata_10e5[[4]])
+```
+
+```{r}
+model_diagnostics(Ucrit_noparent_fulldata_10e5[[5]])
+```
+
+
+### Trimmed data: Ucrit, no parental effects
+
+```{r}
+model_diagnostics(Ucrit_noparent_trimdata_10e5[[1]])
+```
+
+```{r}
+model_diagnostics(Ucrit_noparent_trimdata_10e5[[2]])
+```
+
+```{r}
+model_diagnostics(Ucrit_noparent_trimdata_10e5[[3]])
+```
+
+```{r}
+model_diagnostics(Ucrit_noparent_trimdata_10e5[[4]])
+```
+
+```{r}
+model_diagnostics(Ucrit_noparent_trimdata_10e5[[5]])
+```
+
+### Further convergence diagnostics for selected model
+
+```{r}
+#load 3 model runs (chains) generated in 2_Run_Models.Rmd
+load("../model_runs/chains/Ucrit_noparent_chains_trim.RData")
+run_gelman_diagnostics(Ucrit_noparent_chains_trim)
+```
+
+## Ucrit, parental effects
+Keep trimmed data and prior_expand; check convergence
+
+```{r}
+load("../model_runs/Ucrit_parent_trimdata_10e5.RData")
+model_diagnostics(Ucrit_parent_trimdata_10e5[[1]])
+```
+
+```{r}
+load("../model_runs/chains/Ucrit_parent_chains_trim.RData")
+run_gelman_diagnostics(Ucrit_parent_chains_trim)
+```
+

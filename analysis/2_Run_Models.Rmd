@@ -183,15 +183,10 @@ results <- model_results(model)
 
 ## Run multiple chains for the best prior for each trait and model:
 
+
 ### SL, no parental effects
-Choosing between inverse gamma and parameter-expanded prior. Both mix acceptably well, but the parameter-expanded prior gives a bimodal posterior (one peak at 0, another near where the peak is found with the inverse gamma prior). 
-
-Gelman: "The other way a model can be difficult to fit is if its parameters are only weakly constrained by the posterior. With a small sample size (or, in a hierarchical model, a small number of groups), uncertainty in the hyperparameters can yield a posterior distribution of widely varying curvature, which leads to slowly mixing MCMC." (Stacking for Non-mixing Bayesian Computations, arXiv)
-
-Maybe the bimodal posterior is the result of adding an extra parameter (alpha) from the parameter-expanded prior? In that case, seems okay to just go with the inverse gamma prior.
 
 #### inverse gamma prior
-
 ```{r,eval=FALSE}
 prior_invgamma2 = list(R = list(V = 1, nu = 0.02),
              G = list(G1 = list(V = 1,nu = .02),
@@ -226,7 +221,6 @@ save(SL_noparent_chains_fulldata,file='../model_runs/SL_noparent_chains_fulldata
 ```
 
 #### parameter-expanded prior
-
 ```{r, eval=FALSE}
 #from tuto_en; with residual edited (nu=0.002 instead of nu=1) to be proper
 prior_ext<-list(R=list(V=1,nu=0.002),
@@ -261,3 +255,115 @@ SL_noparent_expand_chains_trim <- list(SL_noparent_expand_chain1,SL_noparent_exp
 save(SL_noparent_expand_chains_trim,file='../model_runs/SL_noparent_expand_chains_trim.RData')
 ```
 
+
+### SL, with parental effects
+
+#### inverse gamma prior (trimmed data)
+```{r}
+prior_invgamma2 = list(R = list(V = 1, nu = 0.02),
+             G = list(G1 = list(V = 1,nu = .02),
+                      G2 = list(V = 1,nu = .02),
+                      G3 = list(V = 1,nu = .02),
+                      G4 = list(V = 1,nu = .02)))
+
+start1=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start3=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+
+SL_parent_chain1 <- MCMCglmm(length~1+age,
+                              random=~animal+clutch+dam+sire,
+                              prior=prior_invgamma2,
+                              start=start1,
+                              ginverse=list(animal=Ainv),
+                              data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+
+SL_parent_chain2 <- MCMCglmm(length~1+age,
+                                random=~animal+clutch+dam+sire,
+                                prior=prior_invgamma2,
+                                start=start2,
+                              ginverse=list(animal=Ainv),
+                                data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+SL_parent_chain3 <- MCMCglmm(length~1+age,
+                                random=~animal+clutch+dam+sire,
+                                prior=prior_invgamma2,
+                                start=start3,
+                              ginverse=list(animal=Ainv),
+                                data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+
+SL_parent_chains_trim <- list(SL_parent_chain1,SL_parent_chain2,SL_parent_chain3)
+save(SL_parent_chains_trim,file='../model_runs/chains/SL_parent_chains_trim.RData')
+```
+
+### Ucrit, no parental effects
+#### parameter-expanded prior
+```{r, eval=FALSE}
+#from tuto_en; with residual edited (nu=0.002 instead of nu=1) to be proper
+prior_expand<-list(R=list(V=1,nu=0.002),
+                G=list(G1=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G2=list(V=1,nu=1,alpha.mu=0,alpha.V=1000)))
+
+start1=list(R=runif(1),G=c(runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1)))
+start3=list(R=runif(1),G=c(runif(1),runif(1)))
+
+Ucrit_noparent_chain1 <- MCMCglmm(speed~1+age,
+                              random=~animal+clutch,
+                              prior=prior_expand,
+                              start=start1,
+                              ginverse=list(animal=Ainv),
+                              data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+
+Ucrit_noparent_chain2 <- MCMCglmm(speed~1+age,
+                                random=~animal+clutch,
+                                prior=prior_expand,
+                                start=start2,
+                              ginverse=list(animal=Ainv),
+                                data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+Ucrit_noparent_chain3 <- MCMCglmm(speed~1+age,
+                                random=~animal+clutch,
+                                prior=prior_expand,
+                                start=start3,
+                              ginverse=list(animal=Ainv),
+                                data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+
+Ucrit_noparent_chains_trim <- list(Ucrit_noparent_chain1,Ucrit_noparent_chain2,Ucrit_noparent_chain3)
+save(Ucrit_noparent_chains_trim,file='../model_runs/chains/Ucrit_noparent_chains_trim.RData')
+```
+
+### Ucrit, parental effects
+#### parameter-expanded prior
+```{r, eval=FALSE}
+#from tuto_en; with residual edited (nu=0.002 instead of nu=1) to be proper
+prior_expand<-list(R=list(V=1,nu=0.002),
+                G=list(G1=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G2=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G3=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G4=list(V=1,nu=1,alpha.mu=0,alpha.V=1000)))
+
+start1=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start3=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+
+Ucrit_parent_chain1 <- MCMCglmm(speed~1+age,
+                              random=~animal+clutch+dam+sire,
+                              prior=prior_expand,
+                              start=start1,
+                              ginverse=list(animal=Ainv),
+                              data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+
+Ucrit_parent_chain2 <- MCMCglmm(speed~1+age,
+                                random=~animal+clutch+dam+sire,
+                                prior=prior_expand,
+                                start=start2,
+                              ginverse=list(animal=Ainv),
+                                data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+Ucrit_parent_chain3 <- MCMCglmm(speed~1+age,
+                                random=~animal+clutch+dam+sire,
+                                prior=prior_expand,
+                                start=start3,
+                              ginverse=list(animal=Ainv),
+                                data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+
+Ucrit_parent_chains_trim <- list(Ucrit_parent_chain1,Ucrit_parent_chain2,Ucrit_parent_chain3)
+save(Ucrit_parent_chains_trim,file='../model_runs/chains/Ucrit_parent_chains_trim.RData')
+```
