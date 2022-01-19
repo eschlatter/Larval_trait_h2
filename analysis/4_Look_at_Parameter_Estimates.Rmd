@@ -19,24 +19,32 @@ load("../model_runs/chains/SL_noparent_chains_trim.RData")
 load("../model_runs/chains/SL_parent_chains_trim.RData")
 load("../model_runs/chains/Ucrit_noparent_chains_trim.RData")
 load("../model_runs/chains/Ucrit_parent_chains_trim.RData")
+load("../model_runs/chains/SL_noparent_chains_trim_10e6.RData")
+load("../model_runs/chains/SL_parent_chains_trim_10e6.RData")
+load("../model_runs/chains/Ucrit_noparent_chains_trim_10e6.RData")
+load("../model_runs/chains/Ucrit_parent_chains_trim_10e6.RData")
 ```
 
 ## SL, no parental effects
 ```{r}
 model_results_chains(SL_noparent_chains_trim)
+model_results_chains(SL_noparent_chains_trim_10e6)
 ```
 
 ## SL, parental effects
 ```{r}
 model_results_chains(SL_parent_chains_trim)
+model_results_chains(SL_parent_chains_trim_10e6)
 ```
 
 ## Ucrit, no parental effects
 ```{r}
 model_results_chains(Ucrit_noparent_chains_trim)
+model_results_chains(Ucrit_noparent_chains_trim_10e6)
 ```
 
 ## Ucrit, parental effects
 ```{r}
 model_results_chains(Ucrit_parent_chains_trim)
+model_results_chains(Ucrit_parent_chains_trim_10e6)
 ```

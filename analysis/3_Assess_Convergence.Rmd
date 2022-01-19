@@ -75,12 +75,15 @@ model_diagnostics(SL_noparent_trimdata_10e5[[5]])
 ```
 
 
-### Further convergence diagnostics for selected models
 Choosing between inverse gamma and parameter-expanded prior. Both mix acceptably well, but the parameter-expanded prior gives a bimodal posterior (one peak at 0, another near where the peak is found with the inverse gamma prior). 
 
 Gelman: "The other way a model can be difficult to fit is if its parameters are only weakly constrained by the posterior. With a small sample size (or, in a hierarchical model, a small number of groups), uncertainty in the hyperparameters can yield a posterior distribution of widely varying curvature, which leads to slowly mixing MCMC." (Stacking for Non-mixing Bayesian Computations, arXiv)
 
 Maybe the bimodal posterior is the result of adding an extra parameter (alpha) from the parameter-expanded prior? In that case, seems okay to just go with the inverse gamma prior.
+
+### Further convergence diagnostics for selected models
+
+Gelman-Rubin diagnostics. ("In practice, a...rule of Rc<1.1 is often used to declare convergence" https://www.stata.com/features/overview/gelman-rubin-convergence-diagnostic/#:~:text=Gelman%20and%20Rubin%20(1992)%20and,often%20used%20to%20declare%20convergence.)
 
 #### SL, no parental effects: invgamma2 prior
 ```{r}
@@ -173,20 +176,29 @@ model_diagnostics(Ucrit_noparent_trimdata_10e5[[5]])
 
 ### Further convergence diagnostics for selected model
 
+Something slightly weird is going on with animal and units, at around 6e04 iterations. Let's run it longer and see what happens.
 ```{r}
 #load 3 model runs (chains) generated in 2_Run_Models.Rmd
 load("../model_runs/chains/Ucrit_noparent_chains_trim.RData")
 run_gelman_diagnostics(Ucrit_noparent_chains_trim)
 ```
 
+Conclusion: change isn't of large-enough magnitude to matter; don't worry about it (?) -- not quite true; for animal, Rc is close to 1.1.
+```{r}
+load("../model_runs/chains/Ucrit_noparent_chains_trim_10e6.RData")
+run_gelman_diagnostics(Ucrit_noparent_chains_trim_10e6)
+```
+
 ## Ucrit, parental effects
-Keep trimmed data and prior_expand; check convergence
+Keep trimmed data and prior_expand; check convergence.
+Trace plots look good. Effective sample size is pretty high and autocorrelation is low.
 
 ```{r}
 load("../model_runs/Ucrit_parent_trimdata_10e5.RData")
 model_diagnostics(Ucrit_parent_trimdata_10e5[[1]])
 ```
 
+Upper CI's for Gelman-Rubin diagnostic are <1.03.
 ```{r}
 load("../model_runs/chains/Ucrit_parent_chains_trim.RData")
 run_gelman_diagnostics(Ucrit_parent_chains_trim)
