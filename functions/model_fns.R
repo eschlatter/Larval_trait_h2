@@ -158,7 +158,16 @@ model_results_chains <- function(model_chains){
   
   #plot histograms of variance estimates
   matrix_scaled_vars <- do.call(cbind,scaled_vars) #put all variables together into a matrix for plotting
-  plot(mcmc_areas(matrix_scaled_vars,prob=0.95,area_method='scaled height')) #scaled to 1
+  
+  #add dummy columns for dam and sire, if necessary
+  if(num_vars==3){
+    matrix_scaled_vars_plot <- cbind(matrix_scaled_vars,rep(0,nrow(matrix_scaled_vars)),rep(0,nrow(matrix_scaled_vars)))
+    matrix_scaled_vars_plot <- matrix_scaled_vars_plot[,c(1,2,4,5,3)]
+    colnames(matrix_scaled_vars_plot)[c(3,4)] <- c('scale_dam',"scale_sire")
+  }
+  else matrix_scaled_vars_plot <- matrix_scaled_vars
+  
+  plot(mcmc_areas(matrix_scaled_vars_plot,prob=0.95,area_method='scaled height')) #scaled to 1
   
   #store estimates (mean, median, upper+lower95) for each variable (original and scaled)
   estimates=data.frame()
@@ -182,8 +191,6 @@ model_results_chains <- function(model_chains){
   
   #estimates_long <- pivot_longer(estimates,mean:lower95,names_to='SummStat',values_to='Value') #in "long" format -- not sure yet which will be most useful
   print(estimates)
-  return(estimates)
-  
 }
 
 #function to run and plot the gelman-rubin diagnostic (using gelman-rubin functions from the coda package)

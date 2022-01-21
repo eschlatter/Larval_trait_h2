@@ -217,7 +217,7 @@ SL_noparent_chain3 <- MCMCglmm(length~1+age,
                                 data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
 
 SL_noparent_chains_fulldata <- list(SL_noparent_chain1,SL_noparent_chain2,SL_noparent_chain3)
-save(SL_noparent_chains_fulldata,file='../model_runs/SL_noparent_chains_fulldata.RData')
+save(SL_noparent_chains_fulldata,file='../model_runs/chains/SL_noparent_chains_fulldata.RData')
 ```
 
 #### inverse gamma prior, run longer
@@ -287,7 +287,7 @@ SL_noparent_expand_chain3 <- MCMCglmm(length~1+age,
                                 data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
 
 SL_noparent_expand_chains_trim <- list(SL_noparent_expand_chain1,SL_noparent_expand_chain2,SL_noparent_expand_chain3)
-save(SL_noparent_expand_chains_trim,file='../model_runs/SL_noparent_expand_chains_trim.RData')
+save(SL_noparent_expand_chains_trim,file='../model_runs/chains/SL_noparent_expand_chains_trim.RData')
 ```
 
 
