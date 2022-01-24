@@ -14,6 +14,7 @@ library(bayesplot) #mcmc_areas plot function
 ```
 
 ```{r}
+#github test change
 source("../functions/model_fns.R")
 ```
 
