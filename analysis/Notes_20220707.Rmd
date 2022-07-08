@@ -1,0 +1,256 @@
+---
+title: "Heritability analysis update"
+author: "E Schlatter"
+date: "7/7/2022"
+output: html_document
+---
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE}
+library(tidyverse)
+source("../functions/model_fns.R")
+```
+
+```{r}
+#function to plot prior and posterior
+plot_priorandpost_new <- function(model,nu.,V_A,V_C,V_E,xlim=0.4){
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  #VA
+  prior_mode = xvals[which.max(dinvgamma(xvals,shape = nu./2,scale = nu.*V_A/2))]
+  animal_samples = as.data.frame(model$VCV)$animal
+  post_density = density(animal_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  
+  colors=c('Prior'='blue','Posterior'='red')
+  xlim=max(post_density$x)
+  g <- ggplot(as.data.frame(model$VCV), aes(x=animal)) + 
+    geom_density(aes(color='Posterior'))+
+    geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                  y = dinvgamma(xvals,shape = nu./2,scale = nu.*V_A/2),
+                  color='Prior'))+
+    geom_vline(aes(xintercept = prior_mode, color='Prior'))+
+    geom_vline(aes(xintercept = post_mode, color='Posterior'))+
+    labs(color='Legend')+
+    ylab('density')+
+    scale_color_manual(values=colors)+
+    ggtitle('animal')+
+    annotate('text', x=c(prior_mode,post_mode),y=c(0.8*max(post_density$y),0.6*max(post_density$y)),label=c(as.character(round(prior_mode,4)),as.character(round(post_mode,4))),colour = c('blue','red'))
+  print(g)
+  
+  #VC
+  prior_mode = xvals[which.max(dinvgamma(xvals,shape = nu./2,scale = nu.*V_C/2))]
+  clutch_samples = as.data.frame(model$VCV)$clutch
+  post_density = density(clutch_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  xlim=max(post_density$x)
+  colors=c('Prior'='blue','Posterior'='red')
+  
+  g <- ggplot(as.data.frame(model$VCV), aes(x=clutch)) + 
+    geom_density(aes(color='Posterior'))+
+    geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                  y = dinvgamma(xvals,shape = nu./2,scale = nu.*V_C/2),
+                  color='Prior'))+
+    geom_vline(aes(xintercept = prior_mode, color='Prior'))+
+    geom_vline(aes(xintercept = post_mode, color='Posterior'))+
+    labs(color='Legend')+
+    ylab('density')+
+    scale_color_manual(values=colors)+
+    ggtitle('clutch')+
+    annotate('text', x=c(prior_mode,post_mode),y=c(0.8*max(post_density$y),0.6*max(post_density$y)),label=c(as.character(round(prior_mode,4)),as.character(round(post_mode,4))),colour = c('blue','red'))
+  print(g)
+  
+  #plot (VE)
+  prior_mode = xvals[which.max(dinvgamma(xvals,shape = nu./2,scale = nu.*V_E/2))]
+  resid_samples = as.data.frame(model$VCV)$units
+  post_density = density(resid_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  xlim=max(post_density$x)
+  colors=c('Prior'='blue','Posterior'='red')
+  
+  g <- ggplot(as.data.frame(model$VCV), aes(x=units)) + 
+    geom_density(aes(color='Posterior'))+
+    geom_line(aes(x = xvals, 
+                  y = dinvgamma(xvals,shape = nu./2,scale = nu.*V_E/2),
+                  color='Prior'))+
+    geom_vline(aes(xintercept = prior_mode, color='Prior'))+
+    geom_vline(aes(xintercept = post_mode, color='Posterior'))+
+    labs(color='Legend')+
+    ylab('density')+
+    scale_color_manual(values=colors)+
+    ggtitle('units')+
+    annotate('text', x=c(prior_mode,post_mode),y=c(0.8*max(post_density$y),0.6*max(post_density$y)),label=c(as.character(round(prior_mode,4)),as.character(round(post_mode,4))),colour = c('blue','red'))
+  print(g) 
+}
+```
+
+## Prior sensitivity
+
+### Ucrit, no parents
+```{r, echo=FALSE}
+load(file='../model_runs/prior_sensitivity/Ucrit_noparent_summary.RData')
+load(file='../model_runs/prior_sensitivity/Ucrit_noparent_VC.RData')
+load(file='../model_runs/prior_sensitivity/Ucrit_noparent_VE.RData')
+
+ggplot(data=VA_samples,aes(x=prior_mode,y=post_mode))+
+  geom_point()+
+  xlab('Prior Mode')+
+  ylab('Posterior Mode and 5%-95% range')+
+  ggtitle('Prior vs posterior modes, VA (black) and VE (blue) of Ucrit')+
+  geom_errorbar(aes(ymin=q5, ymax=q95),width=0.025)+
+  geom_point(data=VE_samples,aes(x=prior_mode+.025,y=post_mode),color='blue')+
+  geom_errorbar(data=VE_samples,aes(x=prior_mode+.025,ymin=q5, ymax=q95),color='blue',width=0.025)+
+  geom_abline(slope=1,intercept=0)
+```
+
+Prior vs posterior, prior mode = 0.05
+```{r,warning=FALSE}
+p_var = var(phens$speed,na.rm=TRUE) #test (phenotypic variance)
+prior_modes = p_var*c(0.01,seq(0.05,1,by=0.05)) # test a range of modes from 1% to 100% of the phenotypic variance
+
+p = prior_modes[1]
+nu = 0.001
+V = ((nu+2)/nu)*p
+load(file=paste0('../model_runs/prior_sensitivity/Ucrit_noparent_p=',round(p,3),'.RData'))
+
+plot_priorandpost(model,nu,V,xlim=p_var)
+
+```
+Prior vs posterior, prior mode = 4.58
+```{r,warning=FALSE}
+p_var = var(phens$speed,na.rm=TRUE) #test (phenotypic variance)
+prior_modes = p_var*c(0.01,seq(0.05,1,by=0.05)) # test a range of modes from 1% to 100% of the phenotypic variance
+
+p = prior_modes[21]
+nu = 0.001
+V = ((nu+2)/nu)*p
+load(file=paste0('../model_runs/prior_sensitivity/Ucrit_noparent_p=',round(p,3),'.RData'))
+
+plot_priorandpost(model,nu,V,xlim=p_var)
+
+```
+
+
+## Try priors differently (so they add up to 1)
+
+```{r}
+p_var = var(phens$speed,na.rm=TRUE) #test (phenotypic variance)
+prior_modes = p_var*c(0.01,seq(0.05,1,by=0.05)) # test a range of modes from 1% to 100% of the phenotypic variance
+nu = 0.001
+
+#set prior mode for clutch at reasonable estimate of 0.65; stays the same for all of these model runs
+p_C = 0.65
+V_C = ((nu+2)/nu)*0.65
+
+# Run model for range of priors and store results
+VA_samples = data.frame(matrix(ncol=10,nrow=0))
+VC_samples = data.frame(matrix(ncol=10,nrow=0))
+VE_samples = data.frame(matrix(ncol=10,nrow=0))
+
+for(p in prior_modes){
+  V_A = ((nu+2)/nu)*p
+  p_E = p_var - p - p_C
+  V_E = ((nu+2)/nu)*p_E
+  
+  prior = list(R=list(V=V_E,nu=0.001),G=list(G1=list(V=V_A,nu=0.001),G2=list(V=V_C,nu=0.001)))
+  model <- MCMCglmm(speed~1+age,
+                    random=~animal+clutch,
+                    prior=prior, ginverse=list(animal=Ainv),
+                    data=phens,nitt=100000,burnin=round(.01*100000),thin=10,verbose=FALSE)
+  v_mcmc <- model$VCV
+  effSamp=effectiveSize(v_mcmc)
+
+  #VA
+  animal_samples = as.data.frame(model$VCV)$animal
+  quants = quantile(animal_samples,c(0.05,0.25,0.5,0.75,0.95))
+  post_density = density(animal_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  effSampA = as.data.frame(t(effSamp))$animal
+  newrow=c(p,p_E,p_C,effSampA,post_mode,as.numeric(quants))
+  VA_samples = rbind(VA_samples,newrow)
+
+  #VC
+  clutch_samples = as.data.frame(model$VCV)$clutch
+  quants = quantile(clutch_samples,c(0.05,0.25,0.5,0.75,0.95))
+  post_density = density(clutch_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  effSampC = as.data.frame(t(effSamp))$clutch
+  newrow=c(p,p_E,p_C,effSampC,post_mode,as.numeric(quants))
+  VC_samples = rbind(VC_samples,newrow)
+
+  #VE
+  units_samples = as.data.frame(model$VCV)$units
+  quants = quantile(units_samples,c(0.05,0.25,0.5,0.75,0.95))
+  post_density = density(units_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  effSampE = as.data.frame(t(effSamp))$units
+  newrow=c(p,p_E,p_C,effSampE,post_mode,as.numeric(quants))
+  VE_samples = rbind(VE_samples,newrow)
+
+  #save model run for further use
+  save(model,file=paste0('../model_runs/prior_sensitivity/Again/Ucrit_noparent_p=',round(p,3),'.RData'))
+  print(p)
+}
+
+colnames(VA_samples)=c('prior_mode_A','prior_mode_E','prior_mode_C','effSampVA','post_mode','q5','q25','q50','q75','q95')
+colnames(VC_samples)=c('prior_mode_A','prior_mode_E','prior_mode_C','effSampVC','post_mode','q5','q25','q50','q75','q95')
+colnames(VE_samples)=c('prior_mode_A','prior_mode_E','prior_mode_C','effSampVE','post_mode','q5','q25','q50','q75','q95')
+
+save(VA_samples,file='../model_runs/prior_sensitivity/Again/Ucrit_noparent_VA.RData')
+save(VC_samples,file='../model_runs/prior_sensitivity/Again/Ucrit_noparent_VC.RData')
+save(VE_samples,file='../model_runs/prior_sensitivity/Again/Ucrit_noparent_VE.RData')
+```
+
+Plot priors and posteriors
+```{r}
+load(file='../model_runs/prior_sensitivity/Again/Ucrit_noparent_VA.RData')
+load(file='../model_runs/prior_sensitivity/Again/Ucrit_noparent_VC.RData')
+load(file='../model_runs/prior_sensitivity/Again/Ucrit_noparent_VE.RData')
+
+
+i = 16 #plot the model in the ith row of the samples tables
+
+load(file=paste0('../model_runs/prior_sensitivity/Again/Ucrit_noparent_p=',round(prior_modes[i],3),'.RData'))
+V_A = VA_samples$prior_mode_A[i]*(nu+2)/nu
+V_C = VA_samples$prior_mode_C[i]*(nu+2)/nu
+V_E = VA_samples$prior_mode_E[i]*(nu+2)/nu
+plot_priorandpost_new(model,nu.=nu,V_A=V_A,V_C=V_C,V_E=V_E,xlim=p_var)
+```
+Plot priors vs posteriors.
+Black points (modes) and intervals (5%-95% regions) are posterior estimates of VA, with prior mode indicated by x-axis value.
+Blue points (modes) and intervals (5%-95% regions) are posterior estimates of VE, with prior mode chosen so the prior modes of VA, VE, and VC add up to the total phenotypic variance.
+Black diagonal line is 1-1.
+Purple vertical line is the prior value we actually used.
+Red line is (scaled) effective sample size for VA (an indication of how well the MCMC algorithm worked).
+```{r}
+ggplot(data=VA_samples,aes(x=prior_mode_A,y=post_mode))+
+  geom_point()+
+  xlab('Prior Mode of VA')+
+  ylab('Posterior Mode and 5%-95% range')+
+  ggtitle('Prior vs posterior modes, VA (black) and VE (blue) of Ucrit')+
+  geom_errorbar(aes(ymin=q5, ymax=q95),width=0.025)+
+  geom_point(data=VE_samples,aes(x=prior_mode_A+.025,y=post_mode),color='blue')+
+  geom_errorbar(data=VE_samples,aes(x=prior_mode_A+.025,ymin=q5, ymax=q95),color='blue',width=0.025)+
+  geom_abline(slope=1,intercept=0)+
+  geom_vline(xintercept=p_var/3,color='purple')+
+  geom_line(data=VA_samples,aes(x=prior_mode_A,y=effSampVA*(4/700)),color='red')
+```
+
+
+
+### SL, no parents
+```{r, echo=FALSE}
+load(file = '../model_runs/prior_sensitivity/SL_noparent_summary.RData')
+load(file='../model_runs/prior_sensitivity/SL_noparent_VC.RData')
+load(file='../model_runs/prior_sensitivity/SL_noparent_VE.RData')
+
+ggplot(data=VA_samples,aes(x=prior_mode,y=post_mode))+
+  geom_point()+
+  xlab('Prior Mode')+
+  ylab('Posterior Mode and 5%-95% range')+
+  ggtitle('Prior vs posterior modes, VA (black) and VE (blue) of larval size')+
+  geom_errorbar(aes(ymin=q5, ymax=q95),width=0.0001)+
+  geom_point(data=VE_samples,aes(x=prior_mode+.0001,y=post_mode),color='blue')+
+  geom_errorbar(data=VE_samples,aes(x=prior_mode+.0001,ymin=q5, ymax=q95),color='blue',width=0.0001)+
+  geom_abline(slope=1,intercept=0)
+```
