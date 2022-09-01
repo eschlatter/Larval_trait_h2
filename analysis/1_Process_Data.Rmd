@@ -11,6 +11,7 @@ library(MasterBayes) #for pedigree functions
 library(MCMCglmm) #for running the model
 library(MCMCpack) #for inverse wishart distributions
 library(bayesplot) #mcmc_areas plot function
+library(gridExtra) #multiple plots per figure
 ```
 
 ## Read in and process the data.
@@ -105,5 +106,8 @@ parents <- subset(full_pedig,is.na(dam)) %>%
 phens <- as.data.frame(phens)
 phens <- rbind(parents,phens)
 
+#larvae_out <- larvae %>% dplyr::select(larvalID,speed,SL,dam=R1.ID.,sire=R2.ID.,tank=Parental.tank,PostSwitch,age=Age.at.hatch)
+#write.csv(larvae_out,file='../data/larvae_all.csv')
 #write.csv(phens,file='../data/phens_notrim.csv')
+#save(phens,Ainv,list=c('phens','Ainv'),file='../data/h2data.RData')
 ```

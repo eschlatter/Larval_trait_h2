@@ -13,7 +13,7 @@ model_run <- function(param_list,response,model_statement,n_vars,n_mcmc_iter){
   model <- MCMCglmm(formula(paste0(response,'~','1+age')),
                     random=formula(paste0('~',model_statement)),
                     prior=prior, ginverse=list(animal=Ainv),
-                    data=phens,nitt=n_mcmc_iter,burnin=round(.01*n_mcmc_iter),thin=10,verbose=TRUE)
+                    data=phens,nitt=n_mcmc_iter,burnin=round(.01*n_mcmc_iter),thin=10,verbose=FALSE)
   #I think the "missing values in random predictors" warning is just because the parents in phens don't have predictor values
   return(model)
 }
@@ -237,5 +237,210 @@ run_gelman_diagnostics <- function(model_chains){
   if(ncol(model_chains[[1]]$VCV)==5){
     gelman.plot(dam_gel,main='dam')
     gelman.plot(sire_gel,main='sire')
+  }
+}
+
+
+#function to plot prior and posterior
+plot_priorandpost <- function(model,nu.,V.,xlim=0.4){
+  
+  #calculate modes of both distributions
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))
+  prior_mode = xvals[which.max(dinvgamma(xvals,shape = nu./2,scale = nu.*V./2))]
+  
+  #plot (VA)
+  animal_samples = as.data.frame(model$VCV)$animal
+  post_density = density(animal_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  
+  colors=c('Prior'='blue','Posterior'='red')
+  xlim=max(post_density$x)
+  g <- ggplot(as.data.frame(model$VCV), aes(x=animal)) + 
+    geom_density(aes(color='Posterior'))+
+    geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                  y = dinvgamma(xvals,shape = nu./2,scale = nu.*V./2),
+                  color='Prior'))+
+    geom_vline(aes(xintercept = prior_mode, color='Prior'))+
+    geom_vline(aes(xintercept = post_mode, color='Posterior'))+
+    labs(color='Legend')+
+    ylab('density')+
+    scale_color_manual(values=colors)+
+    ggtitle('animal')+
+    annotate('text', x=c(prior_mode,post_mode),y=c(0.8*max(post_density$y),0.6*max(post_density$y)),label=c(as.character(round(prior_mode,4)),as.character(round(post_mode,4))),colour = c('blue','red'))
+  print(g)
+  
+  #plot (VC)
+  clutch_samples = as.data.frame(model$VCV)$clutch
+  post_density = density(clutch_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  xlim=max(post_density$x)
+  colors=c('Prior'='blue','Posterior'='red')
+  
+  g <- ggplot(as.data.frame(model$VCV), aes(x=clutch)) + 
+    geom_density(aes(color='Posterior'))+
+    geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                  y = dinvgamma(xvals,shape = nu./2,scale = nu.*V./2),
+                  color='Prior'))+
+    geom_vline(aes(xintercept = prior_mode, color='Prior'))+
+    geom_vline(aes(xintercept = post_mode, color='Posterior'))+
+    labs(color='Legend')+
+    ylab('density')+
+    scale_color_manual(values=colors)+
+    ggtitle('clutch')+
+    annotate('text', x=c(prior_mode,post_mode),y=c(0.8*max(post_density$y),0.6*max(post_density$y)),label=c(as.character(round(prior_mode,4)),as.character(round(post_mode,4))),colour = c('blue','red'))
+  print(g)
+  
+  #plot (VE)
+  resid_samples = as.data.frame(model$VCV)$units
+  post_density = density(resid_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  xlim=max(post_density$x)
+  colors=c('Prior'='blue','Posterior'='red')
+  
+  g <- ggplot(as.data.frame(model$VCV), aes(x=units)) + 
+    geom_density(aes(color='Posterior'))+
+    geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                  y = dinvgamma(xvals,shape = nu./2,scale = nu.*V./2),
+                  color='Prior'))+
+    geom_vline(aes(xintercept = prior_mode, color='Prior'))+
+    geom_vline(aes(xintercept = post_mode, color='Posterior'))+
+    labs(color='Legend')+
+    ylab('density')+
+    scale_color_manual(values=colors)+
+    ggtitle('units')+
+    annotate('text', x=c(prior_mode,post_mode),y=c(0.8*max(post_density$y),0.6*max(post_density$y)),label=c(as.character(round(prior_mode,4)),as.character(round(post_mode,4))),colour = c('blue','red'))
+  print(g) 
+}
+
+#function to plot prior and posterior
+plot_priorandpost_new <- function(model,nu.,V_A,V_C,V_E,xlim=0.4){
+  
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  #VA
+  prior_mode = xvals[which.max(dinvgamma(xvals,shape = nu./2,scale = nu.*V_A/2))]
+  animal_samples = as.data.frame(model$VCV)$animal
+  post_density = density(animal_samples)
+  post_density$y = post_density$y/length(animal_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  
+  colors=c('Prior'='blue','Posterior'='red')
+  xlim=max(post_density$x)
+  g <- ggplot(as.data.frame(model$VCV), aes(x=animal)) + 
+    geom_density(aes(y=..scaled..,color='Posterior'))+
+    geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                  y = dinvgamma(xvals,shape = nu./2,scale = nu.*V_A/2),
+                  color='Prior'))+
+    geom_vline(aes(xintercept = prior_mode, color='Prior'))+
+    geom_vline(aes(xintercept = post_mode, color='Posterior'))+
+    labs(color='Legend')+
+    ylab('density')+
+    scale_color_manual(values=colors)+
+    ggtitle('animal')+
+    annotate('text', x=c(prior_mode,post_mode),y=c(0.8*max(post_density$y),0.6*max(post_density$y)),label=c(as.character(round(prior_mode,4)),as.character(round(post_mode,4))),colour = c('blue','red'))
+  print(g)
+  
+  #VC
+  prior_mode = xvals[which.max(dinvgamma(xvals,shape = nu./2,scale = nu.*V_C/2))]
+  clutch_samples = as.data.frame(model$VCV)$clutch
+  post_density = density(clutch_samples)
+  post_density$y = post_density$y/length(clutch_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  xlim=max(post_density$x)
+  colors=c('Prior'='blue','Posterior'='red')
+  
+  g <- ggplot(as.data.frame(model$VCV), aes(x=clutch)) + 
+    geom_density(aes(y=..scaled..,color='Posterior'))+
+    geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                  y = dinvgamma(xvals,shape = nu./2,scale = nu.*V_C/2),
+                  color='Prior'))+
+    geom_vline(aes(xintercept = prior_mode, color='Prior'))+
+    geom_vline(aes(xintercept = post_mode, color='Posterior'))+
+    labs(color='Legend')+
+    ylab('density')+
+    scale_color_manual(values=colors)+
+    ggtitle('clutch')+
+    annotate('text', x=c(prior_mode,post_mode),y=c(0.8*max(post_density$y),0.6*max(post_density$y)),label=c(as.character(round(prior_mode,4)),as.character(round(post_mode,4))),colour = c('blue','red'))
+  print(g)
+  
+  #plot (VE)
+  prior_mode = xvals[which.max(dinvgamma(xvals,shape = nu./2,scale = nu.*V_E/2))]
+  resid_samples = as.data.frame(model$VCV)$units
+  post_density = density(resid_samples)
+  post_density$y = post_density$y/length(resid_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  xlim=max(post_density$x)
+  colors=c('Prior'='blue','Posterior'='red')
+  
+  g <- ggplot(as.data.frame(model$VCV), aes(x=units)) + 
+    geom_density(aes(y=..scaled..,color='Posterior'))+
+    geom_line(aes(x = xvals, 
+                  y = dinvgamma(xvals,shape = nu./2,scale = nu.*V_E/2),
+                  color='Prior'))+
+    geom_vline(aes(xintercept = prior_mode, color='Prior'))+
+    geom_vline(aes(xintercept = post_mode, color='Posterior'))+
+    labs(color='Legend')+
+    ylab('density')+
+    scale_color_manual(values=colors)+
+    ggtitle('units')+
+    annotate('text', x=c(prior_mode,post_mode),y=c(0.8*max(post_density$y),0.6*max(post_density$y)),label=c(as.character(round(prior_mode,4)),as.character(round(post_mode,4))),colour = c('blue','red'))
+  print(g) 
+}
+
+#function to plot prior and posterior
+plot_priorandpost_two <- function(model,prior,xlim=0){
+  if(xlim==0) xlim=max(model$VCV)
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(name='Posterior density',sec.axis = sec_axis(~./multfactor, name='Prior density')) +
+        theme(axis.text.y.right=element_text(color='blue'),
+            axis.title.y.right=element_text(color='blue'),
+            axis.title.y.left=element_text(color='red'),
+            axis.text.y.left=element_text(color='red'),
+            legend.position = 'none') + 
+      xlab(paste(param_list[i],'variance'))+
+      ggtitle(param_list[i])
+    print(g)
+    
   }
 }
