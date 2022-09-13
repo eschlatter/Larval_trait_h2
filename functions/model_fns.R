@@ -57,7 +57,6 @@ model_diagnostics <- function(model){
   return(diagnostics)
 }
 
-
 model_results <- function(model){
   #proportional variances as new mcmc objects
   scaled_vars <- list()
@@ -193,6 +192,38 @@ model_results_chains <- function(model_chains){
   print(estimates)
 }
 
+plot_matrix_chains <- function(model_chains){
+  chain1 <- as.data.frame(model_chains[[1]]$VCV)
+  chain1$chain <- 1
+  chain2 <- as.data.frame(model_chains[[2]]$VCV)
+  chain2$chain <- 2
+  chain3 <- as.data.frame(model_chains[[3]]$VCV)
+  chain3$chain <- 3
+  
+  model_df <- rbind(chain1,chain2,chain3)
+  
+  #proportional variances as new mcmc objects
+  num_vars <- ncol(model_df)-1
+  scaled_vars <- list()
+  for(i in 1:num_vars){
+    varname <- paste('scale',colnames(model_df[i]),sep='_')
+    scaled_vars[[varname]] <- model_df[,i]/rowSums(as.data.frame(model_df[1:num_vars])) #store them in a list
+  }
+  
+  #plot histograms of variance estimates
+  matrix_scaled_vars <- do.call(cbind,scaled_vars) #put all variables together into a matrix for plotting
+  
+  #add dummy columns for dam and sire, if necessary
+  if(num_vars==3){
+    matrix_scaled_vars_plot <- cbind(matrix_scaled_vars,rep(0,nrow(matrix_scaled_vars)),rep(0,nrow(matrix_scaled_vars)))
+    matrix_scaled_vars_plot <- matrix_scaled_vars_plot[,c(1,2,4,5,3)]
+    colnames(matrix_scaled_vars_plot)[c(3,4)] <- c('scale_dam',"scale_sire")
+  }
+  else matrix_scaled_vars_plot <- matrix_scaled_vars
+  return(matrix_scaled_vars_plot)
+}
+
+
 #function to run and plot the gelman-rubin diagnostic (using gelman-rubin functions from the coda package)
 #input: a list of 3 model objects (should be 3 repeated runs/chains of the same model)
 run_gelman_diagnostics <- function(model_chains){
@@ -206,7 +237,7 @@ run_gelman_diagnostics <- function(model_chains){
   model_chains_df <- rbind(chain1,chain2,chain3)
   mcmc_trace(model_chains_df)
   
-  ## Gelman-Rubin diagnostic: looks good; upper limit is basically 1
+  ## Gelman-Rubin diagnostic: upper limit should be not much larger than 1
   
   intercept_gel=mcmc.list(model_chains[[1]]$Sol,model_chains[[2]]$Sol,model_chains[[3]]$Sol)
   clutch_gel=mcmc.list(model_chains[[1]]$VCV[,'clutch'],model_chains[[2]]$VCV[,'clutch'],model_chains[[3]]$VCV[,'clutch'])
@@ -230,13 +261,13 @@ run_gelman_diagnostics <- function(model_chains){
   }
   
   #accompanying plots
-  gelman.plot(intercept_gel)
-  gelman.plot(clutch_gel,main="clutch")
-  gelman.plot(animal_gel,main="animal")
-  gelman.plot(units_gel,main="units")
+  gelman.plot(intercept_gel,autoburnin=FALSE)
+  gelman.plot(clutch_gel,autoburnin=FALSE,main="clutch")
+  gelman.plot(animal_gel,autoburnin=FALSE,main="animal")
+  gelman.plot(units_gel,autoburnin=FALSE,main="units")
   if(ncol(model_chains[[1]]$VCV)==5){
-    gelman.plot(dam_gel,main='dam')
-    gelman.plot(sire_gel,main='sire')
+    gelman.plot(dam_gel,autoburnin=FALSE,main='dam')
+    gelman.plot(sire_gel,autoburnin=FALSE,main='sire')
   }
 }
 
