@@ -366,3 +366,40 @@ chain3 <- MCMCglmm(speed~1+age,
 Ucrit_withparent_prior2 <- list(chain1,chain2,chain3)
 save(Ucrit_withparent_prior2,file='../model_runs/final/Ucrit_withparent_prior2.RData')
 ```
+
+## Test effect of mistrials covariate
+#### SL
+```{r}
+prior = prior1_SL_noparent
+
+no_mistrials <- MCMCglmm(length~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+with_mistrials <- MCMCglmm(length~1+age+mistrials,
+                   random=~animal+clutch,
+                   prior=prior,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+
+summary(with_mistrials)
+```
+
+#### Ucrit
+```{r}
+prior = prior1_Ucrit_noparent
+
+no_mistrials_Ucrit <- MCMCglmm(speed~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+with_mistrials_Ucrit <- MCMCglmm(speed~1+age+mistrials,
+                   random=~animal+clutch,
+                   prior=prior,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+
+summary(with_mistrials_Ucrit)
+```

@@ -98,11 +98,12 @@ Ainv <- MCMCglmm::inverseA(full_pedig)$Ainv
 
 #phenotype data frame
 phens <- dplyr::select(larvae,animal=larvalID,speed=speed, length=SL, clutch=Clutch, 
-                       dam=R1.ID., sire=R2.ID., tank=Parental.tank, age=Age.at.hatch)
+                       dam=R1.ID., sire=R2.ID., tank=Parental.tank, age=Age.at.hatch,
+                       mistrials = X..mistrials)
   #add empty rows to phens for parents
 parents <- subset(full_pedig,is.na(dam)) %>%
   transmute(animal=id,speed=as.numeric(dam),length=as.numeric(dam),clutch=NA,
-            dam=NA,sire=NA,tank=NA,age=1)
+            dam=NA,sire=NA,tank=NA,age=1, mistrials=0)
 phens <- as.data.frame(phens)
 phens <- rbind(parents,phens)
 
