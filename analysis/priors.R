@@ -12,3 +12,5 @@ prior_invgamma2_params <- list(V = 1,nu = .02)
 
 #flat prior
 prior_flat_params <- list(V = 1e-10,nu = -1) #trusting based on course notes that this is actually flat, because I can't tell what a negative nu means
+
+

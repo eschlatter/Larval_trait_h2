@@ -1,0 +1,368 @@
+---
+title: "Generate priors and run models"
+author: "E Schlatter"
+date: "12/18/2021"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(MasterBayes) #for pedigree functions
+library(MCMCglmm) #for running the model
+library(MCMCpack) #for inverse wishart distributions
+library(bayesplot) #mcmc_areas plot function
+```
+
+```{r}
+load(file='../data/h2data.RData') #phenotype and relatedness data
+load(file='all_priors.RData') #priors
+source("../functions/model_fns.R") #utility functions
+```
+
+We're using a trimmed version of the data that contains only offspring from parents that had two or more mates (i.e., all larvae in the dataset have half-siblings in the dataset).
+
+We ran four models:
+1. response variable SL, no parental effects
+2. response variable SL, with parental effects
+3. response variable Ucrit, no parental effects
+4. response variable Ucrit, with parental effects
+
+All models were run with two priors:
+1. The default prior: variance distributed equally among all components.
+2. The alternative prior: near zero for all variance components.
+
+## Run Models
+
+### SL, no parental effects
+
+#### default prior
+```{r}
+prior = prior1_SL_noparent
+
+start1=list(R=runif(1),G=c(runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1)))
+start3=list(R=runif(1),G=c(runif(1),runif(1)))
+
+chain1 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start1,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+chain2 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start2,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+chain3 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start3,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+SL_noparent_prior1 <- list(chain1,chain2,chain3)
+save(SL_noparent_prior1,file='../model_runs/final/SL_noparent_prior1.RData')
+```
+
+#### alternative prior
+```{r}
+prior = prior2_noparent
+
+start1=list(R=runif(1),G=c(runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1)))
+start3=list(R=runif(1),G=c(runif(1),runif(1)))
+
+chain1 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start1,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+chain2 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start2,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+chain3 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start3,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+
+SL_noparent_prior2 <- list(chain1,chain2,chain3)
+save(SL_noparent_prior2,file='../model_runs/final/SL_noparent_prior2.RData')
+```
+
+#### second alternative prior
+```{r}
+prior = prior3_noparent
+
+start1=list(R=runif(1),G=c(runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1)))
+start3=list(R=runif(1),G=c(runif(1),runif(1)))
+
+chain1 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start1,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+chain2 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start2,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+chain3 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start3,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+
+SL_noparent_prior3 <- list(chain1,chain2,chain3)
+save(SL_noparent_prior3,file='../model_runs/final/SL_noparent_prior3.RData')
+```
+
+
+### SL, with parental effects
+
+#### default prior
+```{r}
+prior = prior1_SL_withparent
+
+start1=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start3=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+
+chain1 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start1,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+chain2 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start2,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+chain3 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start3,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+SL_withparent_prior1 <- list(chain1,chain2,chain3)
+save(SL_withparent_prior1,file='../model_runs/final/SL_withparent_prior1.RData')
+```
+
+
+#### alternative prior
+```{r}
+prior = prior2_withparent
+
+start1=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start3=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+
+chain1 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start1,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+chain2 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start2,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+chain3 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start3,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+SL_withparent_prior2 <- list(chain1,chain2,chain3)
+save(SL_withparent_prior2,file='../model_runs/final/SL_withparent_prior2.RData')
+```
+
+
+#### second alternative prior
+```{r}
+prior = prior3_withparent
+
+start1=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start3=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+
+chain1 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start1,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+chain2 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start2,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+chain3 <- MCMCglmm(length~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start3,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+SL_withparent_prior3 <- list(chain1,chain2,chain3)
+save(SL_withparent_prior3,file='../model_runs/final/SL_withparent_prior3.RData')
+```
+
+
+### Ucrit, no parental effects
+
+#### default prior
+```{r}
+prior = prior1_Ucrit_noparent
+
+start1=list(R=runif(1),G=c(runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1)))
+start3=list(R=runif(1),G=c(runif(1),runif(1)))
+
+chain1 <- MCMCglmm(speed~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start1,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+chain2 <- MCMCglmm(speed~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start2,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+chain3 <- MCMCglmm(speed~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start3,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+Ucrit_noparent_prior1 <- list(chain1,chain2,chain3)
+save(Ucrit_noparent_prior1,file='../model_runs/final/Ucrit_noparent_prior1.RData')
+```
+
+#### alternative prior
+```{r}
+prior = prior2_noparent
+
+start1=list(R=runif(1),G=c(runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1)))
+start3=list(R=runif(1),G=c(runif(1),runif(1)))
+
+chain1 <- MCMCglmm(speed~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start1,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+chain2 <- MCMCglmm(speed~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start2,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+chain3 <- MCMCglmm(speed~1+age,
+                   random=~animal+clutch,
+                   prior=prior,
+                   start=start3,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+Ucrit_noparent_prior2 <- list(chain1,chain2,chain3)
+save(Ucrit_noparent_prior2,file='../model_runs/final/Ucrit_noparent_prior2.RData')
+```
+
+### Ucrit, parental effects
+
+#### default prior
+```{r}
+prior = prior1_Ucrit_withparent
+
+start1=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start3=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+
+chain1 <- MCMCglmm(speed~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start1,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+chain2 <- MCMCglmm(speed~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start2,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+chain3 <- MCMCglmm(speed~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start3,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+Ucrit_withparent_prior1 <- list(chain1,chain2,chain3)
+save(Ucrit_withparent_prior1,file='../model_runs/final/Ucrit_withparent_prior1.RData')
+```
+
+#### alternative prior
+```{r}
+prior = prior2_withparent
+
+start1=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start2=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+start3=list(R=runif(1),G=c(runif(1),runif(1),runif(1),runif(1)))
+
+chain1 <- MCMCglmm(speed~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start1,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+chain2 <- MCMCglmm(speed~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start2,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+chain3 <- MCMCglmm(speed~1+age,
+                   random=~animal+clutch+dam+sire,
+                   prior=prior,
+                   start=start3,
+                   ginverse=list(animal=Ainv),
+                   data=phens,nitt=1000000,burnin=10000,thin=100,verbose=TRUE)
+
+Ucrit_withparent_prior2 <- list(chain1,chain2,chain3)
+save(Ucrit_withparent_prior2,file='../model_runs/final/Ucrit_withparent_prior2.RData')
+```

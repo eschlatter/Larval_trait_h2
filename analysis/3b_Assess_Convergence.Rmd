@@ -1,0 +1,104 @@
+---
+title: "Assess Convergence"
+author: "E Schlatter"
+date: "9/1/2022"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(MasterBayes) #for pedigree functions
+library(MCMCglmm) #for running the model
+library(MCMCpack) #for inverse wishart distributions
+library(bayesplot) #mcmc_areas plot function
+
+source("../functions/model_fns.R")
+```
+
+### SL, no parental effects
+
+#### default prior
+```{r}
+load("../model_runs/final/SL_noparent_prior1.RData")
+run_gelman_diagnostics(SL_noparent_prior1)
+
+model_diagnostics(SL_noparent_prior1[[1]])
+```
+
+#### alternative prior
+```{r}
+load("../model_runs/final/SL_noparent_prior2.RData")
+run_gelman_diagnostics(SL_noparent_prior2)
+
+model_diagnostics(SL_noparent_prior2[[1]])
+```
+
+#### second alternative prior
+```{r}
+load("../model_runs/final/SL_noparent_prior3.RData")
+run_gelman_diagnostics(SL_noparent_prior3)
+
+model_diagnostics(SL_noparent_prior3[[1]])
+```
+
+### SL, with parental effects
+
+#### default prior
+```{r}
+load("../model_runs/final/SL_withparent_prior1.RData")
+run_gelman_diagnostics(SL_withparent_prior1)
+
+model_diagnostics(SL_withparent_prior1[[1]])
+```
+
+#### alternative prior
+```{r}
+load("../model_runs/final/SL_withparent_prior2.RData")
+run_gelman_diagnostics(SL_withparent_prior2)
+
+model_diagnostics(SL_withparent_prior2[[1]])
+```
+
+#### second alternative prior
+```{r}
+load("../model_runs/final/SL_withparent_prior3.RData")
+run_gelman_diagnostics(SL_withparent_prior3)
+
+model_diagnostics(SL_withparent_prior3[[1]])
+```
+
+### Ucrit, no parental effects
+
+#### default prior
+```{r}
+load("../model_runs/final/Ucrit_noparent_prior1.RData")
+run_gelman_diagnostics(Ucrit_noparent_prior1)
+
+model_diagnostics(Ucrit_noparent_prior1[[1]])
+```
+
+#### alternative prior
+```{r}
+load("../model_runs/final/Ucrit_noparent_prior2.RData")
+run_gelman_diagnostics(Ucrit_noparent_prior2)
+
+model_diagnostics(Ucrit_noparent_prior2[[1]])
+```
+
+### Ucrit, with parental effects
+
+#### default prior
+```{r}
+load("../model_runs/final/Ucrit_withparent_prior1.RData")
+run_gelman_diagnostics(Ucrit_withparent_prior1)
+
+model_diagnostics(Ucrit_withparent_prior1[[1]])
+```
+
+#### alternative prior
+```{r}
+load("../model_runs/final/Ucrit_withparent_prior2.RData")
+run_gelman_diagnostics(Ucrit_withparent_prior2)
+
+model_diagnostics(Ucrit_withparent_prior2[[1]])
+```

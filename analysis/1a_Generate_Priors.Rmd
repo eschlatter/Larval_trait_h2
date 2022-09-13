@@ -1,0 +1,101 @@
+---
+title: "Generate priors"
+author: "E Schlatter"
+date: "9/1/2022"
+output: html_document
+---
+
+```{r}
+load(file='../data/h2data.RData') #contains data on larvae, phenotypes, and relatedness
+```
+
+All models will be run with two priors:
+1. The default prior: variance distributed equally among all components.
+2. The alternative prior: near zero for all variance components. (Uses parameter expansion)
+3. Another formulation of a prior near zero (with no parameter expansion); results in a smoother estimate for SL but doesn't mix well for Ucrit.
+
+## Default Priors
+
+All priors are inverse gamma distributions. We chose nu = 0.001 for a relatively flat prior (Hadfield 2010).
+
+We chose the mode of each prior to be p_var/k -- i.e., 1/k of the phenotypic variance (where k is the number of variance components).
+
+The mode of the inverse gamma is V*nu/(nu+2). So,
+
+V = ((nu+2)/nu)*p_var/k.
+
+### SL, no parental effects
+
+```{r}
+nu = 0.001
+p_var = var(phens$length,na.rm=TRUE) #total phenotypic variance in SL
+prior_mode = p_var/3 #prior mode
+V = ((nu+2)/nu)*prior_mode #prior parameter V (inverse Wishart) for additive genetic effect
+
+prior1_SL_noparent = list(R=list(V=V,nu=nu),G=list(G1=list(V=V,nu=nu),G2=list(V=V,nu=nu)))
+```
+
+### SL, with parental effects
+
+```{r}
+nu = 0.001
+p_var = var(phens$length,na.rm=TRUE) #total phenotypic variance in SL
+prior_mode = p_var/5 #prior mode
+V = ((nu+2)/nu)*prior_mode #prior parameter V (inverse Wishart) for additive genetic effect
+
+prior1_SL_withparent = list(R=list(V=V,nu=nu),G=list(G1=list(V=V,nu=nu),G2=list(V=V,nu=nu),G3=list(V=V,nu=nu),G4=list(V=V,nu=nu)))
+```
+
+### Ucrit, no parental effects
+
+```{r}
+nu = 0.001
+p_var = var(phens$speed,na.rm=TRUE) #total phenotypic variance in SL
+prior_mode = p_var/3 #prior mode
+V = ((nu+2)/nu)*prior_mode #prior parameter V (inverse Wishart) for additive genetic effect
+
+prior1_Ucrit_noparent = list(R=list(V=V,nu=nu),G=list(G1=list(V=V,nu=nu),G2=list(V=V,nu=nu)))
+```
+
+### Ucrit, with parental effects
+
+```{r}
+nu = 0.001
+p_var = var(phens$speed,na.rm=TRUE) #total phenotypic variance in SL
+prior_mode = p_var/5 #prior mode
+V = ((nu+2)/nu)*prior_mode #prior parameter V (inverse Wishart) for additive genetic effect
+
+prior1_Ucrit_withparent = list(R=list(V=V,nu=nu),G=list(G1=list(V=V,nu=nu),G2=list(V=V,nu=nu),G3=list(V=V,nu=nu),G4=list(V=V,nu=nu)))
+```
+
+
+## Alternative priors
+
+### Alt prior
+
+```{r}
+prior2_noparent = list(R=list(V=1,nu=0.002),
+                       G=list(G1=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G2=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1)))
+
+prior2_withparent = list(R=list(V=1,nu=0.002),
+                         G=list(G1=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G2=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                                G3=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G4=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1)))
+```
+
+### Second alt prior
+
+```{r}
+prior3_noparent = list(R=list(V=1,nu=0.002),
+                       G=list(G1=list(V = 1,nu = .002),G2=list(V = 1,nu = .002)))
+
+prior3_withparent = list(R=list(V=1,nu=0.002),
+                         G=list(G1=list(V = 1,nu = .002),G2=list(V = 1,nu = .002),G3=list(V = 1,nu = .002),G4=list(V = 1,nu = .002)))
+```
+
+
+## Save to .RData file
+```{r}
+rm(Ainv,phens,nu,p_var,prior_mode,V)
+save.image(file = 'all_priors.RData')
+```
+

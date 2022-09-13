@@ -1,0 +1,94 @@
+---
+title: "Look at parameter estimates"
+author: "E Schlatter"
+date: "9/2/2022"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(MasterBayes) #for pedigree functions
+library(MCMCglmm) #for running the model
+library(MCMCpack) #for inverse wishart distributions
+library(bayesplot) #mcmc_areas plot function
+
+source("../functions/model_fns.R")
+```
+
+### SL, no parental effects
+
+#### default prior
+```{r}
+load("../model_runs/final/SL_noparent_prior1.RData")
+
+model_results_chains(SL_noparent_prior1)
+```
+
+#### alternative prior
+```{r}
+load("../model_runs/final/SL_noparent_prior2.RData")
+
+model_results_chains(SL_noparent_prior2)
+```
+
+#### second alternative prior
+```{r}
+load("../model_runs/final/SL_noparent_prior3.RData")
+
+model_results_chains(SL_noparent_prior3)
+```
+
+### SL, with parental effects
+
+#### default prior
+```{r}
+load("../model_runs/final/SL_withparent_prior1.RData")
+
+model_results_chains(SL_withparent_prior1)
+```
+
+#### alternative prior
+```{r}
+load("../model_runs/final/SL_withparent_prior2.RData")
+
+model_results_chains(SL_withparent_prior2)
+```
+
+#### second alternative prior
+```{r}
+load("../model_runs/final/SL_withparent_prior3.RData")
+
+model_results_chains(SL_withparent_prior3)
+```
+
+### Ucrit, no parental effects
+
+#### default prior
+```{r}
+load("../model_runs/final/Ucrit_noparent_prior1.RData")
+
+model_results_chains(Ucrit_noparent_prior1)
+```
+
+#### alternative prior
+```{r}
+load("../model_runs/final/Ucrit_noparent_prior2.RData")
+
+model_results_chains(Ucrit_noparent_prior2)
+```
+
+### Ucrit, with parental effects
+
+#### default prior
+```{r}
+load("../model_runs/final/Ucrit_withparent_prior1.RData")
+
+model_results_chains(Ucrit_withparent_prior1)
+```
+
+#### alternative prior
+```{r}
+load("../model_runs/final/Ucrit_withparent_prior2.RData")
+
+model_results_chains(Ucrit_withparent_prior2)
+```

@@ -1,0 +1,18 @@
+---
+title: "Heritability analysis update"
+author: "E Schlatter"
+date: "09/01/2022"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(MasterBayes) #for pedigree functions
+library(MCMCglmm) #for running the model
+library(MCMCpack) #for inverse wishart distributions
+library(bayesplot) #mcmc_areas plot function
+library(gridExtra) #multiple plots per figure
+
+source("../functions/model_fns.R")
+load(file='../data/h2data.RData')
+```

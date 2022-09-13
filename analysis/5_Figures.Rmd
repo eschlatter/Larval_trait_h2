@@ -1,0 +1,84 @@
+---
+title: "Figures"
+author: "E Schlatter"
+date: "9/2/2022"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(MasterBayes) #for pedigree functions
+library(MCMCglmm) #for running the model
+library(MCMCpack) #for inverse wishart distributions
+library(bayesplot) #mcmc_areas plot function
+library(gridExtra)
+source("../functions/model_fns.R")
+```
+
+## Figure 2: SL (default prior only)
+
+```{r}
+load("../model_runs/final/SL_noparent_prior1.RData")
+load("../model_runs/final/SL_withparent_prior1.RData")
+
+a=plot_matrix_chains(SL_noparent_prior1)
+colnames(a)=c("Additive genetic","Clutch","Maternal","Paternal","Residual")
+b=plot_matrix_chains(SL_withparent_prior1)
+
+p1 <- mcmc_areas(a,prob=0.95,area_method='scaled height')+
+  xlim(c(0,1))+
+  geom_text(x=0.9,y=5.8,label="(a)")
+p2 <- mcmc_areas(b,prob=0.95,area_method='scaled height')+
+  xlim(c(0,1))+
+  theme(axis.ticks.y=element_blank(),
+        axis.text.y=element_blank())+
+  geom_text(x=0.9,y=5.8,label="(b)")
+g <- grid.arrange(p1,p2,nrow=1,widths=c(1.2,1),
+             left='Effect',bottom='Estimated proportion of variance')
+
+ggsave(filename = 'fig2_SL',plot=g, device = 'jpeg',dpi=300,path='../figures/final/',width=6.52,height=2.96,units='in')
+
+
+rm(SL_noparent_prior1,SL_withparent_prior1,a,b)
+```
+
+## Figure 3: Ucrit (both priors)
+
+```{r}
+load("../model_runs/final/Ucrit_noparent_prior1.RData")
+load("../model_runs/final/Ucrit_withparent_prior1.RData")
+load("../model_runs/final/Ucrit_noparent_prior2.RData")
+load("../model_runs/final/Ucrit_withparent_prior2.RData")
+
+a=plot_matrix_chains(Ucrit_noparent_prior1)
+colnames(a)=c("Additive genetic","Clutch","Maternal","Paternal","Residual")
+b=plot_matrix_chains(Ucrit_withparent_prior1)
+c=plot_matrix_chains(Ucrit_noparent_prior2)
+colnames(c)=c("Additive genetic","Clutch","Maternal","Paternal","Residual")
+d=plot_matrix_chains(Ucrit_withparent_prior2)
+
+p1 <- mcmc_areas(a,prob=0.95,area_method='scaled height')+
+  xlim(c(0,1))+
+  geom_text(x=0.9,y=5.8,label="(a)")
+p2 <- mcmc_areas(b,prob=0.95,area_method='scaled height')+
+  xlim(c(0,1))+
+  theme(axis.ticks.y=element_blank(),
+        axis.text.y=element_blank())+
+  geom_text(x=0.9,y=5.8,label="(b)")
+p3 <- mcmc_areas(c,prob=0.95,area_method='scaled height')+
+  xlim(c(0,1))+
+  geom_text(x=0.9,y=5.8,label="(c)")
+p4 <- mcmc_areas(d,prob=0.95,area_method='scaled height')+
+  xlim(c(0,1))+
+  theme(axis.ticks.y=element_blank(),
+        axis.text.y=element_blank())+
+  geom_text(x=0.9,y=5.8,label="(d)")
+
+g <- grid.arrange(p1,p2,p3,p4,nrow=2,ncol=2,widths=c(1.2,1),
+             left='Effect',bottom='Estimated proportion of variance')
+
+ggsave(filename = 'fig3_Ucrit',plot=g, device = 'jpeg',dpi=300,path='../figures/final/',width=6.52,height=5.8,units='in')
+
+rm(Ucrit_noparent_prior1,Ucrit_withparent_prior1,Ucrit_noparent_prior2,Ucrit_withparent_prior2,a,b,c,d)
+```
+
