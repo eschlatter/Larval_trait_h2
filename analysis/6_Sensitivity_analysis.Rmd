@@ -1,0 +1,1469 @@
+---
+title: "Heritability analysis update"
+author: "E Schlatter"
+date: "7/19/2022"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(MasterBayes) #for pedigree functions
+library(MCMCglmm) #for running the model
+library(MCMCpack) #for inverse wishart distributions
+library(bayesplot) #mcmc_areas plot function
+library(gridExtra) #multiple plots per figure
+
+source("../functions/model_fns.R")
+load(file='../data/h2data.RData')
+```
+
+# Prior and posterior plots
+
+Following the suggestion of one reviewer, I'm looking at a second set of priors. We're estimating three variance components: additive genetic, clutch, and residual. (Or five -- add dam and sire -- in the model with parental effects.)
+
+*Prior 1:* The one I used previously. Priors for variance components are very flat, all with their modes close to zero.
+
+*Prior 2:* The reviewer suggested trying modes equal to 1/3 (or 1/5) of the total phenotypic variance: i.e., a null hypothesis that all components contribute equally to the phenotypic variance. These priors are still all very flat.
+
+## SL, no parent
+
+### Prior 1: all variances near zero
+All variances near zero, no parameter expansion
+All components have moved away from where the prior is centered.
+All posteriors look nice; no bimodality.
+Trace doesn't look great; probably needs to run a little longer.
+```{r}
+prior = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = .002),G2=list(V = 1,nu = .002)))
+# model <- MCMCglmm(length~1+age,
+#                     random=~animal+clutch,
+#                     prior=prior, ginverse=list(animal=Ainv),
+#                     data=phens,nitt=1000000,burnin=round(.01*1000000),thin=100,verbose=FALSE)
+# save(model,file='../model_runs/priors_and_posts/SL_noparent_1.RData')
+
+load(file='../model_runs/priors_and_posts/SL_noparent_1.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=0.015)
+```
+
+```{r}
+prior = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = .002),G2=list(V = 1,nu = .002)))
+load(file='../model_runs/priors_and_posts/SL_noparent_1.RData')
+xlim=0.02
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('SL_noparent_prior1_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+
+  ##heritability plot
+  
+  herit = model$VCV[,1]/rowSums(as.data.frame(model$VCV))
+  
+      g <- ggplot(as.data.frame(herit), aes(x=as.data.frame(herit)[,1])) + 
+      theme_light()+
+      geom_density(aes(color='red'))+
+      xlim(0,1)+
+        theme(axis.text.y=element_text(color='red',size=5,margin=margin(l=-1,r=-1,unit='pt')),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_text(size=6),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = 'SL_noparent_prior1_herit',plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+```
+### Prior 1a: all variances near zero (parameter expansion)
+```{r}
+prior = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G2=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1)))
+# model <- MCMCglmm(length~1+age,
+#                     random=~animal+clutch,
+#                     prior=prior, ginverse=list(animal=Ainv),
+#                     data=phens,nitt=1000000,burnin=round(.01*1000000),thin=100,verbose=FALSE)
+# save(model,file='../model_runs/priors_and_posts/SL_noparent_1a.RData')
+
+load(file='../model_runs/priors_and_posts/SL_noparent_1a.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=0.015)
+```
+
+```{r}
+prior = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G2=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1)))
+load(file='../model_runs/priors_and_posts/SL_noparent_1a.RData')
+xlim=0.02
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylim(0,110)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('SL_noparent_prior1a_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+  
+        ##heritability plot
+  
+  herit = model$VCV[,1]/rowSums(as.data.frame(model$VCV))
+  
+      g <- ggplot(as.data.frame(herit), aes(x=as.data.frame(herit)[,1])) + 
+      theme_light()+
+      geom_density(aes(color='red'))+
+      xlim(0,1)+
+        theme(axis.text.y=element_text(color='red',size=5,margin=margin(l=-1,r=-1,unit='pt')),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_text(size=6),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = 'SL_noparent_prior1a_herit',plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+```
+
+### Prior 2: equal variances
+```{r}
+nu = 0.001
+p_var = var(phens$length,na.rm=TRUE) #total phenotypic variance
+p_A = p_var/3 #prior mode for additive genetic effect
+V_A = ((nu+2)/nu)*p_A #prior parameter V (inverse Wishart) for additive genetic effect
+p_C = p_var/3
+V_C = ((nu+2)/nu)*p_C
+p_E = p_var/3
+V_E = ((nu+2)/nu)*p_E
+
+
+prior = list(R=list(V=V_E,nu=nu),G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu)))
+# model <- MCMCglmm(length~1+age,
+#                     random=~animal+clutch,
+#                     prior=prior, ginverse=list(animal=Ainv),
+#                     data=phens,nitt=100000,burnin=round(.01*100000),thin=10,verbose=FALSE)
+# save(model,file='../model_runs/priors_and_posts/SL_noparent_2.RData')
+
+load(file='../model_runs/priors_and_posts/SL_noparent_2.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=0.015)
+```
+```{r}
+nu = 0.001
+p_var = var(phens$length,na.rm=TRUE) #total phenotypic variance
+p_A = p_var/3 #prior mode for additive genetic effect
+V_A = ((nu+2)/nu)*p_A #prior parameter V (inverse Wishart) for additive genetic effect
+p_C = p_var/3
+V_C = ((nu+2)/nu)*p_C
+p_E = p_var/3
+V_E = ((nu+2)/nu)*p_E
+
+
+prior = list(R=list(V=V_E,nu=nu),G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu)))
+load(file='../model_runs/priors_and_posts/SL_noparent_2.RData')
+xlim=0.02
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('SL_noparent_prior2_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+  
+        ##heritability plot
+  
+  herit = model$VCV[,1]/rowSums(as.data.frame(model$VCV))
+  
+      g <- ggplot(as.data.frame(herit), aes(x=as.data.frame(herit)[,1])) + 
+      theme_light()+
+      geom_density(aes(color='red'))+
+      xlim(0,1)+
+        theme(axis.text.y=element_text(color='red',size=5,margin=margin(l=-1,r=-1,unit='pt')),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_text(size=6),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = 'SL_noparent_prior2_herit',plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+```
+### Prior 3: all variances near 100% VP
+```{r}
+nu = 0.001
+p_var = var(phens$length,na.rm=TRUE) #total phenotypic variance
+p_A = p_var #prior mode for additive genetic effect
+V_A = ((nu+2)/nu)*p_A #prior parameter V (inverse Wishart) for additive genetic effect
+p_C = p_var
+V_C = ((nu+2)/nu)*p_C
+p_E = p_var
+V_E = ((nu+2)/nu)*p_E
+
+prior = list(R=list(V=V_E,nu=nu),G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu)))
+# model <- MCMCglmm(length~1+age,
+#                     random=~animal+clutch,
+#                     prior=prior, ginverse=list(animal=Ainv),
+#                     data=phens,nitt=100000,burnin=round(.01*100000),thin=10,verbose=FALSE)
+# save(model,file='../model_runs/priors_and_posts/SL_noparent_3.RData')
+
+load(file='../model_runs/priors_and_posts/SL_noparent_3.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=0.02)
+```
+
+
+```{r}
+nu = 0.001
+p_var = var(phens$length,na.rm=TRUE) #total phenotypic variance
+p_A = p_var #prior mode for additive genetic effect
+V_A = ((nu+2)/nu)*p_A #prior parameter V (inverse Wishart) for additive genetic effect
+p_C = p_var
+V_C = ((nu+2)/nu)*p_C
+p_E = p_var
+V_E = ((nu+2)/nu)*p_E
+
+
+prior = list(R=list(V=V_E,nu=nu),G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu)))
+load(file='../model_runs/priors_and_posts/SL_noparent_3.RData')
+xlim=0.02
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('SL_noparent_prior3_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+  
+        ##heritability plot
+  
+  herit = model$VCV[,1]/rowSums(as.data.frame(model$VCV))
+  
+      g <- ggplot(as.data.frame(herit), aes(x=as.data.frame(herit)[,1])) + 
+      theme_light()+
+      geom_density(aes(color='red'))+
+      xlim(0,1)+
+        theme(axis.text.y=element_text(color='red',size=5,margin=margin(l=-1,r=-1,unit='pt')),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_text(size=6),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = 'SL_noparent_prior3_herit',plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+```
+,margin=margin(0,0,0,1,unit='pt')
++
+      plot.margin=margin(0,0,0,0,'pt')
+
+## SL, with parent
+
+### Prior 1: all variances near zero
+All variances near zero, no parameter expansion (same as for no parent, so we can compare the two models)
+Could run a little longer; VA effective size is a little small
+```{r}
+prior = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = .002),G2=list(V = 1,nu = .002),G3=list(V = 1,nu = .002),G4=list(V = 1,nu = .002)))
+# model <- MCMCglmm(length~1+age,
+#                     random=~animal+clutch+dam+sire,
+#                     prior=prior, ginverse=list(animal=Ainv),
+#                     data=phens,nitt=1000000,burnin=round(.01*1000000),thin=100,verbose=FALSE)
+# 
+# save(model,file='../model_runs/priors_and_posts/SL_withparent_1.RData')
+load(file='../model_runs/priors_and_posts/SL_withparent_1.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=0.015)
+```
+
+```{r}
+prior = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = .002),G2=list(V = 1,nu = .002),G3=list(V = 1,nu = .002),G4=list(V = 1,nu = .002)))
+load(file='../model_runs/priors_and_posts/SL_withparent_1.RData')
+xlim=0.02
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('SL_withparent_prior1_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+```
+### Prior 1a: all variances near zero (parameter expansion)
+```{r}
+prior = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G2=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                    G3=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G4=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1)))
+model <- MCMCglmm(length~1+age,
+                    random=~animal+clutch+dam+sire,
+                    prior=prior, ginverse=list(animal=Ainv),
+                    data=phens,nitt=1000000,burnin=round(.01*1000000),thin=100,verbose=FALSE)
+
+save(model,file='../model_runs/priors_and_posts/SL_withparent_1a.RData')
+#load(file='../model_runs/priors_and_posts/SL_withparent_1a.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=0.015)
+```
+
+
+```{r}
+prior = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G2=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                    G3=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G4=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1)))
+load(file='../model_runs/priors_and_posts/SL_withparent_1a.RData')
+xlim=0.02
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('SL_withparent_prior1a_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+```
+
+### Prior 2: equal variances
+#### **needs to be run longer
+```{r}
+nu = 0.001
+p_var = var(phens$length,na.rm=TRUE) #total phenotypic variance
+p_A = p_var * 0.2
+V_A = ((nu+2)/nu)*p_A
+V_C = V_A
+V_D = V_A
+V_S = V_A
+V_E = V_A
+
+
+prior = list(R=list(V=V_E,nu=nu),
+             G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu),G3=list(V=V_D,nu=nu),G4=list(V=V_S,nu=nu)))
+
+# model <- MCMCglmm(length~1+age,
+#                     random=~animal+clutch+dam+sire,
+#                     prior=prior, ginverse=list(animal=Ainv),
+#                     data=phens,nitt=100000,burnin=round(.01*100000),thin=10,verbose=FALSE)
+# save(model,file='../model_runs/priors_and_posts/SL_withparent_2.RData')
+load(file='../model_runs/priors_and_posts/SL_withparent_2.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=0.03)
+```
+
+```{r}
+nu = 0.001
+p_var = var(phens$length,na.rm=TRUE) #total phenotypic variance
+p_A = p_var * 0.2
+V_A = ((nu+2)/nu)*p_A
+V_C = V_A
+V_D = V_A
+V_S = V_A
+V_E = V_A
+
+
+prior = list(R=list(V=V_E,nu=nu),
+             G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu),G3=list(V=V_D,nu=nu),G4=list(V=V_S,nu=nu)))
+load(file='../model_runs/priors_and_posts/SL_withparent_2.RData')
+xlim=0.02
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('SL_withparent_prior2_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+```
+### Prior 3: all variances near 100% VP
+```{r}
+nu = 0.001
+p_var = var(phens$length,na.rm=TRUE) #total phenotypic variance
+p_A = p_var
+V_A = ((nu+2)/nu)*p_A
+V_C = V_A
+V_D = V_A
+V_S = V_A
+V_E = V_A
+
+
+prior = list(R=list(V=V_E,nu=nu),
+             G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu),G3=list(V=V_D,nu=nu),G4=list(V=V_S,nu=nu)))
+
+# model <- MCMCglmm(length~1+age,
+#                     random=~animal+clutch+dam+sire,
+#                     prior=prior, ginverse=list(animal=Ainv),
+#                     data=phens,nitt=100000,burnin=round(.01*100000),thin=10,verbose=FALSE)
+# save(model,file='../model_runs/priors_and_posts/SL_withparent_3.RData')
+load(file='../model_runs/priors_and_posts/SL_withparent_3.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=0.03)
+```
+
+```{r}
+nu = 0.001
+p_var = var(phens$length,na.rm=TRUE) #total phenotypic variance
+p_A = p_var
+V_A = ((nu+2)/nu)*p_A
+V_C = V_A
+V_D = V_A
+V_S = V_A
+V_E = V_A
+
+
+prior = list(R=list(V=V_E,nu=nu),
+             G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu),G3=list(V=V_D,nu=nu),G4=list(V=V_S,nu=nu)))
+load(file='../model_runs/priors_and_posts/SL_withparent_3.RData')
+xlim=0.02
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('SL_withparent_prior3_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+```
+
+## Ucrit, no parent
+
+### Prior 1: all variances near zero
+```{r}
+prior = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V=1,nu=1000,alpha.mu=0,alpha.V=1),G2=list(V=1,nu=1000,alpha.mu=0,alpha.V=1)))
+
+# model <- MCMCglmm(speed~1+age,
+#                     random=~animal+clutch,
+#                     prior=prior, ginverse=list(animal=Ainv),
+#                     data=phens,nitt=100000,burnin=round(.01*100000),thin=10,verbose=FALSE)
+# save(model,file='../model_runs/priors_and_posts/Ucrit_noparent_1.RData')
+load(file='../model_runs/priors_and_posts/Ucrit_noparent_1.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=5)
+```
+```{r}
+prior = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V=1,nu=1000,alpha.mu=0,alpha.V=1),G2=list(V=1,nu=1000,alpha.mu=0,alpha.V=1)))
+load(file='../model_runs/priors_and_posts/Ucrit_noparent_1.RData')
+xlim=5
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('Ucrit_noparent_prior1_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+  
+    herit = model$VCV[,1]/rowSums(as.data.frame(model$VCV))
+  
+      g <- ggplot(as.data.frame(herit), aes(x=as.data.frame(herit)[,1])) + 
+      theme_light()+
+      geom_density(aes(color='red'))+
+      xlim(0,1)+
+        theme(axis.text.y=element_text(color='red',size=5,margin=margin(l=-1,r=-1,unit='pt')),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_text(size=6),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = 'Ucrit_noparent_prior1_herit',plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+```
+
+### Prior 2: equal variances
+#### **could run this one longer
+```{r}
+nu = 0.001
+p_var = var(phens$speed,na.rm=TRUE) #total phenotypic variance
+p_A = p_var/3 #prior mode for additive genetic effect
+V_A = ((nu+2)/nu)*p_A #prior parameter V (inverse Wishart) for additive genetic effect
+p_C = p_var/3
+V_C = ((nu+2)/nu)*p_C
+p_E = p_var/3
+V_E = ((nu+2)/nu)*p_E
+
+
+prior = list(R=list(V=V_E,nu=nu),G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu)))
+# model <- MCMCglmm(speed~1+age,
+#                     random=~animal+clutch,
+#                     prior=prior, ginverse=list(animal=Ainv),
+#                     data=phens,nitt=100000,burnin=round(.01*100000),thin=10,verbose=FALSE)
+# save(model,file='../model_runs/priors_and_posts/Ucrit_noparent_2.RData')
+
+load(file='../model_runs/priors_and_posts/Ucrit_noparent_2.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=5)
+```
+```{r}
+nu = 0.001
+p_var = var(phens$speed,na.rm=TRUE) #total phenotypic variance
+p_A = p_var/3 #prior mode for additive genetic effect
+V_A = ((nu+2)/nu)*p_A #prior parameter V (inverse Wishart) for additive genetic effect
+p_C = p_var/3
+V_C = ((nu+2)/nu)*p_C
+p_E = p_var/3
+V_E = ((nu+2)/nu)*p_E
+
+
+prior = list(R=list(V=V_E,nu=nu),G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu)))
+load(file='../model_runs/priors_and_posts/Ucrit_noparent_2.RData')
+xlim=5
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('Ucrit_noparent_prior2_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+  
+    herit = model$VCV[,1]/rowSums(as.data.frame(model$VCV))
+  
+      g <- ggplot(as.data.frame(herit), aes(x=as.data.frame(herit)[,1])) + 
+      theme_light()+
+      geom_density(aes(color='red'))+
+      xlim(0,1)+
+        theme(axis.text.y=element_text(color='red',size=5,margin=margin(l=-1,r=-1,unit='pt')),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_text(size=6),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = 'Ucrit_noparent_prior2_herit',plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+```
+
+### Prior 3: all variances near 100% VP
+```{r}
+nu = 0.001
+p_var = var(phens$speed,na.rm=TRUE) #total phenotypic variance
+p_A = p_var #prior mode for additive genetic effect
+V_A = ((nu+2)/nu)*p_A #prior parameter V (inverse Wishart) for additive genetic effect
+p_C = p_var
+V_C = ((nu+2)/nu)*p_C
+p_E = p_var
+V_E = ((nu+2)/nu)*p_E
+
+
+prior = list(R=list(V=V_E,nu=nu),G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu)))
+model <- MCMCglmm(speed~1+age,
+                    random=~animal+clutch,
+                    prior=prior, ginverse=list(animal=Ainv),
+                    data=phens,nitt=100000,burnin=round(.01*100000),thin=10,verbose=FALSE)
+save(model,file='../model_runs/priors_and_posts/Ucrit_noparent_3.RData')
+
+#load(file='../model_runs/priors_and_posts/Ucrit_noparent_3.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=5)
+```
+
+```{r}
+nu = 0.001
+p_var = var(phens$speed,na.rm=TRUE) #total phenotypic variance
+p_A = p_var #prior mode for additive genetic effect
+V_A = ((nu+2)/nu)*p_A #prior parameter V (inverse Wishart) for additive genetic effect
+p_C = p_var
+V_C = ((nu+2)/nu)*p_C
+p_E = p_var
+V_E = ((nu+2)/nu)*p_E
+
+
+prior = list(R=list(V=V_E,nu=nu),G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu)))
+load(file='../model_runs/priors_and_posts/Ucrit_noparent_3.RData')
+xlim=5
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('Ucrit_noparent_prior3_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+  
+    herit = model$VCV[,1]/rowSums(as.data.frame(model$VCV))
+  
+      g <- ggplot(as.data.frame(herit), aes(x=as.data.frame(herit)[,1])) + 
+      theme_light()+
+      geom_density(aes(color='red'))+
+      xlim(0,1)+
+        theme(axis.text.y=element_text(color='red',size=5,margin=margin(l=-1,r=-1,unit='pt')),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_text(size=6),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = 'Ucrit_noparent_prior3_herit',plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+```
+
+## Ucrit, with parent
+
+### Prior 1: all variances near zero
+
+```{r}
+prior = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V=1,nu=1000,alpha.mu=0,alpha.V=1),G2=list(V=1,nu=1000,alpha.mu=0,alpha.V=1),
+                    G3=list(V=1,nu=1000,alpha.mu=0,alpha.V=1),G4=list(V=1,nu=1000,alpha.mu=0,alpha.V=1)))
+
+# model <- MCMCglmm(speed~1+age,
+#                     random=~animal+clutch+dam+sire,
+#                     prior=prior, ginverse=list(animal=Ainv),
+#                     data=phens,nitt=100000,burnin=round(.01*100000),thin=10,verbose=FALSE)
+# save(model,file='../model_runs/priors_and_posts/Ucrit_withparent_1.RData')
+
+load(file='../model_runs/priors_and_posts/Ucrit_withparent_1.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=5)
+```
+```{r}
+prior = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V=1,nu=1000,alpha.mu=0,alpha.V=1),G2=list(V=1,nu=1000,alpha.mu=0,alpha.V=1),
+                    G3=list(V=1,nu=1000,alpha.mu=0,alpha.V=1),G4=list(V=1,nu=1000,alpha.mu=0,alpha.V=1)))
+load(file='../model_runs/priors_and_posts/Ucrit_withparent_1.RData')
+xlim=5
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('Ucrit_withparent_prior1_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+```
+
+### Prior 2: equal variances
+#### **needs to be run longer
+```{r}
+nu = 0.001
+p_var = var(phens$speed,na.rm=TRUE) #total phenotypic variance
+p_A = p_var * 0.2
+V_A = ((nu+2)/nu)*p_A
+V_C = V_A
+V_D = V_A
+V_S = V_A
+V_E = V_A
+
+prior = list(R=list(V=V_E,nu=nu),
+             G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu),G3=list(V=V_D,nu=nu),G4=list(V=V_S,nu=nu)))
+model <- MCMCglmm(speed~1+age,
+                    random=~animal+clutch+dam+sire,
+                    prior=prior, ginverse=list(animal=Ainv),
+                    data=phens,nitt=100000,burnin=round(.01*100000),thin=10,verbose=FALSE)
+save(model,file='../model_runs/priors_and_posts/Ucrit_withparent_2.RData')
+
+#load(file='../model_runs/priors_and_posts/Ucrit_withparent_2.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=5)
+```
+
+```{r}
+nu = 0.001
+p_var = var(phens$speed,na.rm=TRUE) #total phenotypic variance
+p_A = p_var * 0.2
+V_A = ((nu+2)/nu)*p_A
+V_C = V_A
+V_D = V_A
+V_S = V_A
+V_E = V_A
+
+prior = list(R=list(V=V_E,nu=nu),
+             G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu),G3=list(V=V_D,nu=nu),G4=list(V=V_S,nu=nu)))
+load(file='../model_runs/priors_and_posts/Ucrit_withparent_2.RData')
+xlim=5
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('Ucrit_withparent_prior2_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+```
+
+### Prior 3: all variances near 100% VP
+```{r}
+nu = 0.001
+p_var = var(phens$speed,na.rm=TRUE) #total phenotypic variance
+p_A = p_var
+V_A = ((nu+2)/nu)*p_A
+V_C = V_A
+V_D = V_A
+V_S = V_A
+V_E = V_A
+
+prior = list(R=list(V=V_E,nu=nu),
+             G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu),G3=list(V=V_D,nu=nu),G4=list(V=V_S,nu=nu)))
+model <- MCMCglmm(speed~1+age,
+                    random=~animal+clutch+dam+sire,
+                    prior=prior, ginverse=list(animal=Ainv),
+                    data=phens,nitt=100000,burnin=round(.01*100000),thin=10,verbose=FALSE)
+save(model,file='../model_runs/priors_and_posts/Ucrit_withparent_3.RData')
+
+#load(file='../model_runs/priors_and_posts/Ucrit_withparent_2.RData')
+
+model_diagnostics(model)
+model_results(model)
+plot_priorandpost_two(model,prior,xlim=5)
+```
+
+```{r}
+nu = 0.001
+p_var = var(phens$speed,na.rm=TRUE) #total phenotypic variance
+p_A = p_var
+V_A = ((nu+2)/nu)*p_A
+V_C = V_A
+V_D = V_A
+V_S = V_A
+V_E = V_A
+
+prior = list(R=list(V=V_E,nu=nu),
+             G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu),G3=list(V=V_D,nu=nu),G4=list(V=V_S,nu=nu)))
+load(file='../model_runs/priors_and_posts/Ucrit_withparent_3.RData')
+xlim=5
+
+  xvals = seq(0,xlim,length.out=nrow(model$VCV))  
+  
+  param_list = colnames(model$VCV)
+  
+  for(i in 1:length(param_list)){
+    #get prior parameters for the current variance component
+    if(i==length(param_list)) {prior_params = prior$R #last one is the residual
+    } else prior_params = prior$G[[i]] #others are elements of G
+    
+    #generate prior density (y values to match the existing xvals vector)
+    if(length(prior_params)==4){ #parameter-expanded priors
+      prior_density = df(xvals/prior_params$alpha.V, df1 = 1, df2 = prior_params$nu, ncp = (prior_params$alpha.mu^2)/prior_params$alpha.V)
+    } else if(length(prior_params)==2){ #regular inverse-gamma priors
+      prior_density = dinvgamma(xvals,shape = prior_params$nu/2,scale = prior_params$nu*prior_params$V/2)
+    } else print('Warning: cannot handle this type of prior')
+    
+    #get prior mode to use for plotting    
+    prior_mode = xvals[which.max(prior_density)]
+    if(prior_mode==xvals[length(xvals)]) print('Warning: xlim is too small')
+    
+    #grab posterior samples and convert to density
+    post_samples = model$VCV[,i]
+    post_density = density(post_samples)
+    #post_density$y = post_density$y/post_density$n
+    post_mode = post_density$x[which.max(post_density$y)]
+    
+    #do some scaling if necessary
+    multfactor=1
+    if((max(prior_density,na.rm=TRUE)*10) < max(post_density$y)){ #if the prior density is on a much smaller scale than the posterior
+      multfactor = 0.4*(max(post_density$y)/max(prior_density,na.rm=TRUE))
+      prior_density = prior_density * multfactor
+    }
+    
+    colors=c('Prior'='blue','Posterior'='red')
+    g <- ggplot(as.data.frame(model$VCV), aes(x=as.data.frame(model$VCV)[,i])) + 
+      theme_light()+
+      geom_density(aes(color='Posterior'))+
+      xlim(0,xlim)+
+      geom_line(aes(x = xvals, 
+                    y = prior_density,
+                    color='Prior'))+
+      labs(color='Legend')+
+      scale_color_manual(values=colors)+
+      scale_y_continuous(sec.axis = sec_axis(~./multfactor)) +
+        theme(axis.text.y.right=element_text(color='blue',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y.left=element_text(color='red',margin=margin(l=-1,r=-1,unit='pt')),
+            axis.text.y = element_text(size = 5),
+            axis.ticks = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x=element_blank(),
+            legend.position = 'none')+
+      xlab(NULL)+
+      ylab(NULL)
+    
+    ggsave(filename = paste0('Ucrit_withparent_prior3_',i),plot=g,
+           device = 'jpeg',path='PriorPostPlots/',width=1.3,height=1.3,units='in')
+  }
+```

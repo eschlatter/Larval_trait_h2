@@ -1,0 +1,821 @@
+---
+title: "Supplementary analyses"
+author: "E Schlatter"
+date: "6/7/2022"
+output: html_document
+---
+
+## Suggested prior from reviewer
+
+```{r, eval = FALSE}
+p_var_Ucrit = var(phens$speed,na.rm=TRUE) #total phenotypic variance in Ucrit ~ 4.58
+
+V_SL_parent = ((nu+2)/nu)*p_var_SL/5
+V_Ucrit_noparent = ((nu+2)/nu)*p_var_Ucrit/3
+V_Ucrit_parent = ((nu+2)/nu)*p_var_Ucrit/5
+
+plot(seq(0,0.1,by=0.001),dinvgamma(seq(0,0.1,by=0.001),nu/2,nu*V_SL_parent/2),type='l',xlab='x',ylab = 'invgamma',main = 'SL parent prior')
+plot(seq(0,25,by=0.1),dinvgamma(seq(0,25,by=0.1),nu/2,nu*V_Ucrit_noparent/2),type='l',xlab='x',ylab = 'invgamma',main = 'Ucrit no parent prior')
+plot(seq(0,25,by=0.1),dinvgamma(seq(0,25,by=0.1),nu/2,nu*V_Ucrit_parent/2),type='l',xlab='x',ylab = 'invgamma',main = 'Ucrit parent prior')
+```
+
+### Try ucrit with suggested prior
+
+```{r}
+p_var_Ucrit = var(phens$speed,na.rm=TRUE) #total phenotypic variance in Ucrit ~ 4.58
+nu = 0.001
+V_Ucrit_noparent = ((nu+2)/nu)*p_var_Ucrit/3
+V = V_Ucrit_noparent
+
+Ucrit_noparent_newprior <- model_run(list(V=V,nu=nu),'speed',"animal+clutch",2,100000)
+model_diagnostics(Ucrit_noparent_newprior)
+model_results(Ucrit_noparent_newprior)
+plot_priorandpost(Ucrit_noparent_newprior,nu,V,xlim=5)
+plot(seq(0,25,by=0.1),dinvgamma(seq(0,25,by=0.1),nu/2,nu*V_Ucrit_noparent/2),type='l',xlab='x',ylab = 'invgamma',main = 'Ucrit no parent prior')
+```
+
+## Prior sensitivity
+
+### Ucrit, no parents
+```{r}
+p_var = var(phens$speed,na.rm=TRUE) #test (phenotypic variance)
+prior_modes = p_var*c(0.01,seq(0.05,1,by=0.05)) # test a range of modes from 1% to 100% of the phenotypic variance
+nu = 0.001
+
+## Run model for range of priors and store results
+# VA_samples = data.frame(matrix(ncol=8,nrow=0))
+# VC_samples = data.frame(matrix(ncol=8,nrow=0))
+# VE_samples = data.frame(matrix(ncol=8,nrow=0))
+# 
+# for(p in prior_modes){
+#   V = ((nu+2)/nu)*p
+#   model <- model_run(list(V=V,nu=nu),'speed',"animal+clutch",2,100000)
+#   v_mcmc <- model$VCV
+#   effSamp=effectiveSize(v_mcmc)
+# 
+#   #VA
+#   animal_samples = as.data.frame(model$VCV)$animal
+#   quants = quantile(animal_samples,c(0.05,0.25,0.5,0.75,0.95))
+#   post_density = density(animal_samples)
+#   post_mode = post_density$x[which.max(post_density$y)]
+#   effSampA = as.data.frame(t(effSamp))$animal
+#   newrow=c(p,effSampA,post_mode,as.numeric(quants))
+#   VA_samples = rbind(VA_samples,newrow)
+#   
+#   #VC
+#   clutch_samples = as.data.frame(model$VCV)$clutch
+#   quants = quantile(clutch_samples,c(0.05,0.25,0.5,0.75,0.95))
+#   post_density = density(clutch_samples)
+#   post_mode = post_density$x[which.max(post_density$y)]
+#   effSampC = as.data.frame(t(effSamp))$clutch
+#   newrow=c(p,effSampC,post_mode,as.numeric(quants))
+#   VC_samples = rbind(VC_samples,newrow)
+#   
+#   #VE
+#   units_samples = as.data.frame(model$VCV)$units
+#   quants = quantile(units_samples,c(0.05,0.25,0.5,0.75,0.95))
+#   post_density = density(units_samples)
+#   post_mode = post_density$x[which.max(post_density$y)]
+#   effSampE = as.data.frame(t(effSamp))$units
+#   newrow=c(p,effSampE,post_mode,as.numeric(quants))
+#   VE_samples = rbind(VE_samples,newrow)
+#   
+#   #save model run for further use
+#   save(model,file=paste0('../model_runs/prior_sensitivity/Again/Ucrit_noparent_p=',round(p,3),'.RData'))
+# }
+# 
+# colnames(VA_samples)=c('prior_mode','effSampVA','post_mode','q5','q25','q50','q75','q95')
+# save(VA_samples,file='../model_runs/prior_sensitivity/Again/Ucrit_noparent_VA.RData')
+# save(VC_samples,file='../model_runs/prior_sensitivity/Again/Ucrit_noparent_VC.RData')
+# save(VE_samples,file='../model_runs/prior_sensitivity/Again/Ucrit_noparent_VE.RData')
+
+VC_samples = data.frame(matrix(ncol=8,nrow=0))
+VE_samples = data.frame(matrix(ncol=8,nrow=0))
+
+for(p in prior_modes){
+  #load existing model with the proper mode (p)
+  load(file=paste0('../model_runs/prior_sensitivity/Ucrit_noparent_p=',round(p,3),'.RData'))
+  v_mcmc <- model$VCV
+  effSamp=effectiveSize(v_mcmc)
+  
+  #VC
+  clutch_samples = as.data.frame(model$VCV)$clutch
+  quants = quantile(clutch_samples,c(0.05,0.25,0.5,0.75,0.95))
+  post_density = density(clutch_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  effSampC = as.data.frame(t(effSamp))$clutch
+  newrow=c(p,effSampC,post_mode,as.numeric(quants))
+  VC_samples = rbind(VC_samples,newrow)
+  
+  #VE
+  units_samples = as.data.frame(model$VCV)$units
+  quants = quantile(units_samples,c(0.05,0.25,0.5,0.75,0.95))
+  post_density = density(units_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  effSampE = as.data.frame(t(effSamp))$units
+  newrow=c(p,effSampE,post_mode,as.numeric(quants))
+  VE_samples = rbind(VE_samples,newrow)
+}
+
+colnames(VC_samples)=c('prior_mode','effSampVA','post_mode','q5','q25','q50','q75','q95')
+colnames(VE_samples)=c('prior_mode','effSampVA','post_mode','q5','q25','q50','q75','q95')
+
+save(VC_samples,file='../model_runs/prior_sensitivity/Ucrit_noparent_VC.RData')
+save(VE_samples,file='../model_runs/prior_sensitivity/Ucrit_noparent_VE.RData')
+```
+
+
+#### ** Supp figure
+```{r}
+
+load(file='../model_runs/prior_sensitivity/Ucrit_noparent_summary.RData')
+load(file='../model_runs/prior_sensitivity/Ucrit_noparent_VC.RData')
+load(file='../model_runs/prior_sensitivity/Ucrit_noparent_VE.RData')
+
+# ggplot(data=VA_samples,aes(x=prior_mode,y=post_mode))+
+#   geom_point()+
+#   xlab('Prior Mode')+
+#   ylab('Posterior Mode and 5%-95% range')+
+#   ggtitle('Prior vs posterior modes, VA (black) and VE (blue) of Ucrit')+
+#   geom_errorbar(aes(ymin=q5, ymax=q95),width=0.025)+
+#   geom_point(data=VE_samples,aes(x=prior_mode+.025,y=post_mode),color='blue')+
+#   geom_errorbar(data=VE_samples,aes(x=prior_mode+.025,ymin=q5, ymax=q95),color='blue',width=0.025)+
+#   geom_abline(slope=1,intercept=0)
+
+ggplot(data=VA_samples,aes(x=prior_mode,y=post_mode))+
+  ylim(c(0,4.7))+
+  geom_point()+
+  xlab('Prior Mode')+
+  ylab('Posterior Mode (5%-95%)')+
+  ggtitle('Prior vs posterior modes of VA (swimming speed, without parental effects)')+
+  geom_errorbar(aes(ymin=q5, ymax=q95),width=0.025)+
+  geom_abline(slope=1,intercept=0)
+```
+
+
+#### Plot some priors and posteriors
+
+
+```{r}
+
+```
+
+
+### Ucrit, with parents
+
+```{r, eval=FALSE}
+# p_var = var(phens$speed,na.rm=TRUE) #test (phenotypic variance)
+# prior_modes = p_var*c(0.01,seq(0.05,1,by=0.05)) # test a range of modes from 1% to 100% of the phenotypic variance
+# nu = 0.001
+# 
+# # Run model for range of priors and store results
+# VA_samples = data.frame(matrix(ncol=8,nrow=0))
+# VC_samples = data.frame(matrix(ncol=8,nrow=0))
+# VD_samples = data.frame(matrix(ncol=8,nrow=0))
+# VS_samples = data.frame(matrix(ncol=8,nrow=0))
+# VE_samples = data.frame(matrix(ncol=8,nrow=0))
+# 
+# for(p in prior_modes){
+#   V = ((nu+2)/nu)*p
+#   model <- model_run(list(V=V,nu=nu),'speed',"animal+clutch+dam+sire",4,100000)
+#   v_mcmc <- model$VCV
+#   effSamp=effectiveSize(v_mcmc)
+# 
+#   #VA
+#   animal_samples = as.data.frame(model$VCV)$animal
+#   quants = quantile(animal_samples,c(0.05,0.25,0.5,0.75,0.95))
+#   post_density = density(animal_samples)
+#   post_mode = post_density$x[which.max(post_density$y)]
+#   effSampA = as.data.frame(t(effSamp))$animal
+#   newrow=c(p,effSampA,post_mode,as.numeric(quants))
+#   VA_samples = rbind(VA_samples,newrow)
+# 
+#   #VC
+#   clutch_samples = as.data.frame(model$VCV)$clutch
+#   quants = quantile(clutch_samples,c(0.05,0.25,0.5,0.75,0.95))
+#   post_density = density(clutch_samples)
+#   post_mode = post_density$x[which.max(post_density$y)]
+#   effSampC = as.data.frame(t(effSamp))$clutch
+#   newrow=c(p,effSampC,post_mode,as.numeric(quants))
+#   VC_samples = rbind(VC_samples,newrow)
+# 
+#     #VD
+#   dam_samples = as.data.frame(model$VCV)$dam
+#   quants = quantile(dam_samples,c(0.05,0.25,0.5,0.75,0.95))
+#   post_density = density(dam_samples)
+#   post_mode = post_density$x[which.max(post_density$y)]
+#   effSampD = as.data.frame(t(effSamp))$dam
+#   newrow=c(p,effSampD,post_mode,as.numeric(quants))
+#   VD_samples = rbind(VD_samples,newrow)
+# 
+#     #VS
+#   sire_samples = as.data.frame(model$VCV)$sire
+#   quants = quantile(sire_samples,c(0.05,0.25,0.5,0.75,0.95))
+#   post_density = density(sire_samples)
+#   post_mode = post_density$x[which.max(post_density$y)]
+#   effSampS = as.data.frame(t(effSamp))$sire
+#   newrow=c(p,effSampS,post_mode,as.numeric(quants))
+#   VS_samples = rbind(VS_samples,newrow)
+#   
+#   #VE
+#   units_samples = as.data.frame(model$VCV)$units
+#   quants = quantile(units_samples,c(0.05,0.25,0.5,0.75,0.95))
+#   post_density = density(units_samples)
+#   post_mode = post_density$x[which.max(post_density$y)]
+#   effSampE = as.data.frame(t(effSamp))$units
+#   newrow=c(p,effSampE,post_mode,as.numeric(quants))
+#   VE_samples = rbind(VE_samples,newrow)
+# 
+#   #save model run for further use
+#   save(model,file=paste0('../model_runs/prior_sensitivity/Again/Ucrit_withparent_p=',round(p,3),'.RData'))
+}
+# 
+# colnames(VA_samples)=c('prior_mode','effSampVA','post_mode','q5','q25','q50','q75','q95')
+# save(VA_samples,file='../model_runs/prior_sensitivity/Again/Ucrit_withparent_VA.RData')
+# save(VC_samples,file='../model_runs/prior_sensitivity/Again/Ucrit_withparent_VC.RData')
+# save(VD_samples,file='../model_runs/prior_sensitivity/Again/Ucrit_withparent_VD.RData')
+# save(VS_samples,file='../model_runs/prior_sensitivity/Again/Ucrit_withparent_VS.RData')
+# save(VE_samples,file='../model_runs/prior_sensitivity/Again/Ucrit_withparent_VE.RData')
+
+```
+
+```{r}
+ggplot(data=VA_samples,aes(x=prior_mode,y=post_mode))+
+  geom_point()+
+  xlab('Prior Mode')+
+  ylab('Posterior Mode (5%-95%)')+
+  ggtitle('Prior vs posterior modes of VA (swimming speed, with parental effects)')+
+  geom_errorbar(aes(ymin=q5, ymax=q95),width=0.025)+
+  geom_abline(slope=1,intercept=0)
+```
+
+
+### Prior sensitivity, SL
+```{r}
+p_var = var(phens$length,na.rm=TRUE) #test (phenotypic variance)
+prior_modes = p_var*c(0.01,seq(0.05,1,by=0.05)) # test a range of modes from 1% to 100% of the phenotypic variance
+nu = 0.001
+
+## Run model for range of priors and store results
+# VA_samples = data.frame(matrix(ncol=8,nrow=0))
+# 
+# for(p in prior_modes){
+#   V = ((nu+2)/nu)*p
+#   model <- model_run(list(V=V,nu=nu),'length',"animal+clutch",2,100000)
+#   
+#   #VA
+#   animal_samples = as.data.frame(model$VCV)$animal
+#   quants = quantile(animal_samples,c(0.05,0.25,0.5,0.75,0.95))
+#   post_density = density(animal_samples)
+#   post_mode = post_density$x[which.max(post_density$y)]
+#   v_mcmc <- model$VCV
+#   effSamp=effectiveSize(v_mcmc)
+#   effSampA = as.data.frame(t(effSamp))$animal
+#   
+#   newrow=c(p,effSampA,post_mode,as.numeric(quants))
+#   VA_samples = rbind(VA_samples,newrow)
+#   save(model,file=paste0('../model_runs/prior_sensitivity/SL_noparent_p=',round(p,3),'.RData'))
+# }
+# 
+# colnames(VA_samples)=c('prior_mode','effSampVA','post_mode','q5','q25','q50','q75','q95')
+# save(VA_samples,file='../model_runs/prior_sensitivity/SL_noparent_summary.RData')
+
+VC_samples = data.frame(matrix(ncol=8,nrow=0))
+VE_samples = data.frame(matrix(ncol=8,nrow=0))
+
+for(p in prior_modes){
+  #load existing model with the proper mode (p)
+  load(file=paste0('../model_runs/prior_sensitivity/SL_noparent_p=',round(p,3),'.RData'))
+  v_mcmc <- model$VCV
+  effSamp=effectiveSize(v_mcmc)
+  
+  #VC
+  clutch_samples = as.data.frame(model$VCV)$clutch
+  quants = quantile(clutch_samples,c(0.05,0.25,0.5,0.75,0.95))
+  post_density = density(clutch_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  effSampC = as.data.frame(t(effSamp))$clutch
+  newrow=c(p,effSampC,post_mode,as.numeric(quants))
+  VC_samples = rbind(VC_samples,newrow)
+  
+  #VE
+  units_samples = as.data.frame(model$VCV)$units
+  quants = quantile(units_samples,c(0.05,0.25,0.5,0.75,0.95))
+  post_density = density(units_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  effSampE = as.data.frame(t(effSamp))$units
+  newrow=c(p,effSampE,post_mode,as.numeric(quants))
+  VE_samples = rbind(VE_samples,newrow)
+}
+
+colnames(VC_samples)=c('prior_mode','effSampVA','post_mode','q5','q25','q50','q75','q95')
+colnames(VE_samples)=c('prior_mode','effSampVA','post_mode','q5','q25','q50','q75','q95')
+
+save(VC_samples,file='../model_runs/prior_sensitivity/SL_noparent_VC.RData')
+save(VE_samples,file='../model_runs/prior_sensitivity/SL_noparent_VE.RData')
+```
+
+```{r}
+load(file = '../model_runs/prior_sensitivity/SL_noparent_summary.RData')
+load(file='../model_runs/prior_sensitivity/SL_noparent_VC.RData')
+load(file='../model_runs/prior_sensitivity/SL_noparent_VE.RData')
+
+ggplot(data=VA_samples,aes(x=prior_mode,y=post_mode))+
+  geom_point()+
+  xlab('Prior Mode')+
+  ylab('Posterior Mode and 5%-95% range')+
+  ggtitle('Prior vs posterior modes, VA (black) and VE (blue) of larval size')+
+  geom_errorbar(aes(ymin=q5, ymax=q95),width=0.0001)+
+  geom_point(data=VE_samples,aes(x=prior_mode+.0001,y=post_mode),color='blue')+
+  geom_errorbar(data=VE_samples,aes(x=prior_mode+.0001,ymin=q5, ymax=q95),color='blue',width=0.0001)+
+  geom_abline(slope=1,intercept=0)
+
+ggplot(data=VA_samples,aes(x=prior_mode,y=post_mode))+
+  geom_point()+
+  xlab('Prior Mode')+
+  ylab('Posterior Mode (5%-95%)')+
+  ggtitle('Prior vs posterior modes of VA (larval size, without parental effects)')+
+  geom_errorbar(aes(ymin=q5, ymax=q95),width=0.0001)+
+  geom_abline(slope=1,intercept=0)
+```
+
+#### SL with parents
+
+```{r, eval=FALSE}
+p_var = var(phens$length,na.rm=TRUE) #test (phenotypic variance)
+prior_modes = p_var*c(0.01,seq(0.05,1,by=0.05)) # test a range of modes from 1% to 100% of the phenotypic variance
+nu = 0.001
+
+# Run model for range of priors and store results
+VA_samples = data.frame(matrix(ncol=8,nrow=0))
+VC_samples = data.frame(matrix(ncol=8,nrow=0))
+VD_samples = data.frame(matrix(ncol=8,nrow=0))
+VS_samples = data.frame(matrix(ncol=8,nrow=0))
+VE_samples = data.frame(matrix(ncol=8,nrow=0))
+
+for(p in prior_modes){
+  V = ((nu+2)/nu)*p
+  model <- model_run(list(V=V,nu=nu),'length',"animal+clutch+dam+sire",4,100000)
+  v_mcmc <- model$VCV
+  effSamp=effectiveSize(v_mcmc)
+
+  #VA
+  animal_samples = as.data.frame(model$VCV)$animal
+  quants = quantile(animal_samples,c(0.05,0.25,0.5,0.75,0.95))
+  post_density = density(animal_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  effSampA = as.data.frame(t(effSamp))$animal
+  newrow=c(p,effSampA,post_mode,as.numeric(quants))
+  VA_samples = rbind(VA_samples,newrow)
+
+  #VC
+  clutch_samples = as.data.frame(model$VCV)$clutch
+  quants = quantile(clutch_samples,c(0.05,0.25,0.5,0.75,0.95))
+  post_density = density(clutch_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  effSampC = as.data.frame(t(effSamp))$clutch
+  newrow=c(p,effSampC,post_mode,as.numeric(quants))
+  VC_samples = rbind(VC_samples,newrow)
+
+    #VD
+  dam_samples = as.data.frame(model$VCV)$dam
+  quants = quantile(dam_samples,c(0.05,0.25,0.5,0.75,0.95))
+  post_density = density(dam_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  effSampD = as.data.frame(t(effSamp))$dam
+  newrow=c(p,effSampD,post_mode,as.numeric(quants))
+  VD_samples = rbind(VD_samples,newrow)
+
+    #VS
+  sire_samples = as.data.frame(model$VCV)$sire
+  quants = quantile(sire_samples,c(0.05,0.25,0.5,0.75,0.95))
+  post_density = density(sire_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  effSampS = as.data.frame(t(effSamp))$sire
+  newrow=c(p,effSampS,post_mode,as.numeric(quants))
+  VS_samples = rbind(VS_samples,newrow)
+
+  #VE
+  units_samples = as.data.frame(model$VCV)$units
+  quants = quantile(units_samples,c(0.05,0.25,0.5,0.75,0.95))
+  post_density = density(units_samples)
+  post_mode = post_density$x[which.max(post_density$y)]
+  effSampE = as.data.frame(t(effSamp))$units
+  newrow=c(p,effSampE,post_mode,as.numeric(quants))
+  VE_samples = rbind(VE_samples,newrow)
+
+  #save model run for further use
+  save(model,file=paste0('../model_runs/prior_sensitivity/Again/SL_withparent_p=',round(p,3),'.RData'))
+}
+
+colnames(VA_samples)=c('prior_mode','effSampVA','post_mode','q5','q25','q50','q75','q95')
+save(VA_samples,file='../model_runs/prior_sensitivity/Again/SL_withparent_VA.RData')
+save(VC_samples,file='../model_runs/prior_sensitivity/Again/SL_withparent_VC.RData')
+save(VD_samples,file='../model_runs/prior_sensitivity/Again/SL_withparent_VD.RData')
+save(VS_samples,file='../model_runs/prior_sensitivity/Again/SL_withparent_VS.RData')
+save(VE_samples,file='../model_runs/prior_sensitivity/Again/SL_withparent_VE.RData')
+
+```
+
+```{r}
+ggplot(data=VA_samples,aes(x=prior_mode,y=post_mode))+
+  geom_point()+
+  xlab('Prior Mode')+
+  ylab('Posterior Mode (5%-95%)')+
+  ggtitle('Prior vs posterior modes of VA (larval size, with parental effects)')+
+  geom_errorbar(aes(ymin=q5, ymax=q95),width=0.0001)+
+  geom_abline(slope=1,intercept=0)
+```
+
+## Plot prior and posterior
+
+```{r}
+plot_priorandpost <- function(model,nu.,V.,xlim=0.4){
+
+#calculate modes of both distributions
+xvals = seq(0,xlim,length.out=nrow(model$VCV))
+prior_mode = xvals[which.max(dinvgamma(xvals,shape = nu./2,scale = nu.*V./2))]
+
+#plot (VA)
+animal_samples = as.data.frame(model$VCV)$animal
+post_density = density(animal_samples)
+post_mode = post_density$x[which.max(post_density$y)]
+
+colors=c('Prior'='blue','Posterior'='red')
+xlim=max(post_density$x)
+g <- ggplot(as.data.frame(model$VCV), aes(x=animal)) + 
+  geom_density(aes(color='Posterior'))+
+  geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                y = dinvgamma(xvals,shape = nu./2,scale = nu.*V./2),
+                color='Prior'))+
+  geom_vline(aes(xintercept = prior_mode, color='Prior'))+
+  geom_vline(aes(xintercept = post_mode, color='Posterior'))+
+  labs(color='Legend')+
+  ylab('density')+
+  scale_color_manual(values=colors)+
+  ggtitle('animal')+
+  annotate('text', x=c(prior_mode,post_mode),y=c(0.8*max(post_density$y),0.6*max(post_density$y)),label=c(as.character(round(prior_mode,4)),as.character(round(post_mode,4))),colour = c('blue','red'))
+print(g)
+
+#plot (VC)
+clutch_samples = as.data.frame(model$VCV)$clutch
+post_density = density(clutch_samples)
+post_mode = post_density$x[which.max(post_density$y)]
+xlim=max(post_density$x)
+colors=c('Prior'='blue','Posterior'='red')
+
+g <- ggplot(as.data.frame(model$VCV), aes(x=clutch)) + 
+  geom_density(aes(color='Posterior'))+
+  geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                y = dinvgamma(xvals,shape = nu./2,scale = nu.*V./2),
+                color='Prior'))+
+  geom_vline(aes(xintercept = prior_mode, color='Prior'))+
+  geom_vline(aes(xintercept = post_mode, color='Posterior'))+
+  labs(color='Legend')+
+  ylab('density')+
+  scale_color_manual(values=colors)+
+  ggtitle('clutch')+
+  annotate('text', x=c(prior_mode,post_mode),y=c(0.8*max(post_density$y),0.6*max(post_density$y)),label=c(as.character(round(prior_mode,4)),as.character(round(post_mode,4))),colour = c('blue','red'))
+print(g)
+
+#plot (VE)
+resid_samples = as.data.frame(model$VCV)$units
+post_density = density(resid_samples)
+post_mode = post_density$x[which.max(post_density$y)]
+xlim=max(post_density$x)
+colors=c('Prior'='blue','Posterior'='red')
+
+g <- ggplot(as.data.frame(model$VCV), aes(x=units)) + 
+  geom_density(aes(color='Posterior'))+
+  geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                y = dinvgamma(xvals,shape = nu./2,scale = nu.*V./2),
+                color='Prior'))+
+  geom_vline(aes(xintercept = prior_mode, color='Prior'))+
+  geom_vline(aes(xintercept = post_mode, color='Posterior'))+
+  labs(color='Legend')+
+  ylab('density')+
+  scale_color_manual(values=colors)+
+  ggtitle('units')+
+  annotate('text', x=c(prior_mode,post_mode),y=c(0.8*max(post_density$y),0.6*max(post_density$y)),label=c(as.character(round(prior_mode,4)),as.character(round(post_mode,4))),colour = c('blue','red'))
+ print(g) 
+}
+
+```
+
+
+
+
+```{r}
+p_var = var(phens$length,na.rm=TRUE) #total phenotypic variance in SL ~ 0.015
+
+# inverse gamma parameters
+# mode of the inverse gamma (according to Hadfield) is V*nu/(nu+2). So if we want a mode of p_var/k (where k is the # of variance components),
+# V = ((nu+2)/nu)*p_var/k
+# k = 3 (animal, clutch, residual) or 5 (animal, clutch, maternal, paternal, residual)
+nu = 0.001
+V = ((nu+2)/nu)*p_var/3
+nu.=nu
+V.=V
+
+# run analysis
+SL_noparent_newprior <- model_run(list(V=V,nu=nu),'length',"animal+clutch",2,100000)
+model_diagnostics(SL_noparent_newprior)
+model_results(SL_noparent_newprior)
+plot_priorandpost(SL_noparent_newprior,nu,V)
+
+model=SL_noparent_newprior
+xlim=100
+
+#calculate modes of both distributions
+xvals = seq(0,xlim,length.out=nrow(model$VCV))
+prior_mode = xvals[which.max(dinvgamma(xvals,shape = nu./2,scale = nu.*V./2))]
+
+#plot (VA)
+animal_samples = as.data.frame(model$VCV)$animal
+post_density = density(animal_samples)
+post_mode = post_density$x[which.max(post_density$y)]
+
+colors=c('Prior'='blue','Posterior'='red')
+
+g <- ggplot(as.data.frame(model$VCV), aes(x=animal)) + 
+  geom_density(aes(color='Posterior'))+
+  geom_line(aes(x = seq(0,xlim,length.out=nrow(model$VCV)), 
+                y = dinvgamma(xvals,shape = nu./2,scale = nu.*V./2),
+                color='Prior'))+
+  geom_vline(aes(xintercept = prior_mode, color='Prior'))+
+  geom_vline(aes(xintercept = post_mode, color='Posterior'))+
+  labs(color='Legend')+
+  ylab('density')+
+  scale_color_manual(values=colors)+
+  ggtitle('animal')+
+  xlim(0,100)+
+  ylim(0,.001)+
+  annotate('text', x=c(prior_mode,post_mode),y=c(10,20),label=c(as.character(round(prior_mode,4)),as.character(round(post_mode,4))),colour = c('blue','red'))
+print(g)
+
+```
+
+```{r}
+#use old invgamma2 prior (from manuscript)
+nu = 0.02
+V = 1
+
+# run analysis
+SL_noparent_oldprior <- model_run(list(V=V,nu=nu),'length',"animal+clutch",2,100000)
+model_diagnostics(SL_noparent_oldprior)
+model_results(SL_noparent_oldprior)
+plot_priorandpost(SL_noparent_oldprior,nu,V)
+
+```
+
+
+```{r}
+# test: what if we start with a variance lower than the posterior mode?
+# doesn't mix as well (unsurprising)
+nu=0.001
+V_low = ((nu+2)/nu)*p_var/20
+SL_noparent_test <- model_run(list(V=V_low,nu=nu),'length',"animal+clutch",2,100000)
+model_diagnostics(SL_noparent_test)
+model_results(SL_noparent_test)
+plot_priorandpost(SL_noparent_test,nu,V_low)
+
+```
+
+## Scramble phenotypes to see what h2 estimate we get by chance, with no relationship
+Never mind!! When no relationship exists between SL and relatedness, the model estimates a very tiny additive genetic effect. Almost all variance is attributed to the residual effect. This is reassuring. [When I got a different result before, I had left the ginverse line out of the model specification, so no information about relatedness was being used at all.]
+```{r}
+nu = 0.001
+V = ((nu+2)/nu)*p_var/3
+randomize = c(c(1:nrow(parents)),sample(c((nrow(parents)+1):nrow(phens))))
+SLs_rand = phens$length[randomize]
+phens_rand = dplyr::select(phens,-length)
+phens_rand = mutate(phens_rand,length = SLs_rand,.before = clutch)
+
+SL_noparent_shuffle_V <- MCMCglmm(length ~ 1+age, random=~clutch+animal,
+                             ginverse=list(animal=Ainv),
+                                prior=list(R = list(V=V,nu=nu),
+                                           G = list(G1 = list(V=V,nu=nu),
+                                                    G2 = list(V=V,nu=nu))),
+                                data=phens_rand,nitt=100000,burnin=100,thin=10)
+
+model_diagnostics(SL_noparent_shuffle_V)
+model_results(SL_noparent_shuffle_V)
+plot_priorandpost(SL_noparent_shuffle_V,nu,V)
+``` 
+
+### Do this a bunch of times
+
+```{r, eval=FALSE}
+reps = 20
+#use old invgamma2 prior (from manuscript)
+nu = 0.02
+V = 1
+# nu = 0.001
+# V = ((nu+2)/nu)*p_var/3
+#initialize dataframe for summary stats
+summ_stats = data.frame()
+
+for(rep in 1:reps){
+  #randomize SLs with respect to larval ID
+  randomize = c(c(1:nrow(parents)),sample(c((nrow(parents)+1):nrow(phens))))
+  SLs_rand = phens$length[randomize]
+  phens_rand = dplyr::select(phens,-length)
+  phens_rand = mutate(phens_rand,length = SLs_rand,.before = clutch)
+  
+  #model estimating variance components for SL
+  model <- MCMCglmm(length ~ 1+age, random=~clutch+animal,
+                             ginverse=list(animal=Ainv),
+                                  prior=list(R = list(V=V,nu=nu),
+                                             G = list(G1 = list(V=V,nu=nu),
+                                                      G2 = list(V=V,nu=nu))),
+                                  data=phens_rand,nitt=100000,burnin=100,thin=10,verbose=FALSE)
+  
+  
+  #save results
+    #proportional variances as new mcmc objects
+  scaled_vars <- list()
+  for(i in 1:ncol(model$VCV)){
+    varname <- paste('scale',colnames(model$VCV)[i],sep='_')
+    scaled_vars[[varname]] <- model$VCV[,i]/rowSums(as.data.frame(model$VCV)) #store them in a list
+  }
+  matrix_scaled_vars <- do.call(cbind,scaled_vars) #put all variables together into a matrix
+  
+  #store estimates (mean, median, upper+lower95) for each variable (original and scaled)
+  estimates=data.frame()
+    #original variables
+  for(i in 1:ncol(model$VCV)){
+    v_name <- colnames(model$VCV)[i]
+    v_mcmc <- model$VCV[,i]
+    #calculate mode
+    post_density = density(v_mcmc)
+    post_mode = post_density$x[which.max(post_density$y)]
+    v_estimates <- data.frame(variable=v_name,
+                              mean=mean(v_mcmc),median=median(v_mcmc),upper95=HPDinterval(v_mcmc)[,2],lower95=HPDinterval(v_mcmc)[,1],mode=post_mode)
+    estimates=rbind(estimates,v_estimates)
+  }
+    #scaled variables  
+  for(i in 1:ncol(matrix_scaled_vars)){
+    v_name <- colnames(matrix_scaled_vars)[i]
+    v_mcmc <- scaled_vars[[i]]
+    post_density = density(v_mcmc)
+    post_mode = post_density$x[which.max(post_density$y)]
+    v_estimates <- data.frame(variable=v_name,
+                              mean=mean(v_mcmc),median=median(v_mcmc),upper95=HPDinterval(v_mcmc)[,2],lower95=HPDinterval(v_mcmc)[,1],mode=post_mode)
+    estimates=rbind(estimates,v_estimates)
+  }
+  rownames(estimates)=c(colnames(model$VCV),colnames(matrix_scaled_vars))
+  
+  estimates_long <- pivot_longer(estimates,mean:mode,names_to='SummStat',values_to='Value') #in "long" format -- not sure yet which will be most useful
+  summ_stats = rbind(summ_stats,t(estimates_long$Value))
+  
+}
+
+estimates_long = mutate(estimates_long,names = paste(as.character(variable),as.character(SummStat)))
+colnames(summ_stats)=estimates_long$names
+
+save(summ_stats,file = "../model_runs/NullEstVA_corrected.RData")
+```
+
+### same, but with the unrealistically low prior
+```{r}
+nu=0.001
+V_low = ((nu+2)/nu)*p_var/20
+randomize = c(c(1:nrow(parents)),sample(c((nrow(parents)+1):nrow(phens))))
+SLs_rand = phens$length[randomize]
+phens_rand = dplyr::select(phens,-length)
+phens_rand = mutate(phens_rand,length = SLs_rand,.before = clutch)
+
+SL_noparent_shuffle <- MCMCglmm(length ~ 1+age, random=~clutch+animal,
+                                prior=list(R = list(V=V_low,nu=nu),
+                                           G = list(G1 = list(V=V_low,nu=nu),
+                                                    G2 = list(V=V_low,nu=nu))),
+                                data=phens_rand,nitt=100000,burnin=100,thin=10)
+model_diagnostics(SL_noparent_shuffle)
+model_results(SL_noparent_shuffle)
+plot_priorandpost(SL_noparent_shuffle,nu,V_low)
+```
+
+
+### Normalize SL (mean=0,var=1) to see if it changes h2 estimate
+It doesn't.
+```{r}
+nu = 0.001
+V = ((nu+2)/nu)*p_var/3
+phens_norm = mutate(phens,SL_norm = scale(length))
+
+SL_noparent_norm <- MCMCglmm(length ~ 1+age, random=~animal + clutch,
+                             ginverse=list(animal=Ainv),
+                                prior=list(R = list(V=V,nu=nu),
+                                           G = list(G1 = list(V=V,nu=nu),
+                                                    G2 = list(V=V,nu=nu))),
+                                data=phens,nitt=100000,burnin=100,thin=10)
+
+model_diagnostics(SL_noparent_norm)
+model_results(SL_noparent_norm)
+plot_priorandpost(SL_noparent_norm,nu,V)
+``` 
+
+
+
+
+
+## Use SL as a covariate for Ucrit
+
+Original analysis: Ucrit~age+animal+clutch+units
+```{r}
+#from tuto_en; with residual edited (nu=0.002 instead of nu=1) to be proper
+prior_expand<-list(R=list(V=1,nu=0.002),
+                G=list(G1=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G2=list(V=1,nu=1,alpha.mu=0,alpha.V=1000)))
+
+Ucrit_noparent <- MCMCglmm(speed~1+age,
+                              random=~animal+clutch,
+                              prior=prior_expand,
+                              ginverse=list(animal=Ainv),
+                              data=phens,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+model_results(Ucrit_noparent)
+```
+
+Compare with using SL as a fixed effect: Ucrit~age+SL+animal+clutch+units
+```{r}
+#from tuto_en; with residual edited (nu=0.002 instead of nu=1) to be proper
+prior_expand<-list(R=list(V=1,nu=0.002),
+                G=list(G1=list(V=1,nu=1,alpha.mu=0,alpha.V=1000),
+                       G2=list(V=1,nu=1,alpha.mu=0,alpha.V=1000)))
+
+#give parents SL of 0 (because MCMCglmm complains if fixed effect predictor doesn't have a value for each observation)
+phens_edit=phens
+for(i in 1:nrow(phens)){
+  if(is.na(phens$length[i])) phens_edit$length[i]=0
+}
+
+Ucrit_noparent_withSL <- MCMCglmm(speed~1+age+length,
+                              random=~animal+clutch,
+                              prior=prior_expand,
+                              ginverse=list(animal=Ainv),
+                              data=phens_edit,nitt=100000,burnin=1000,thin=10,verbose=TRUE)
+model_results(Ucrit_noparent_withSL)
+```
+
+
+
+## Bivariate animal model
+
+[speed,length]~ breeding value + clutch + error
+```{r}
+#normalize phenotypic traits (mean=0,variance=1)
+phens_norm=transmute(phens,animal=animal,speed=scale(speed),length=scale(length),clutch=clutch)
+psi=.2
+nu=2
+
+prior<-list(R=list(V=diag(2)/(0.002/1.002),nu=1.002),
+            G=list(G1=list(V=diag(2)/(0.002/1.002),nu=1.002),
+                   G2=list(V=diag(2)/(0.002/1.002),nu=1.002)))
+
+#prior<-list(R=list(V=psi*diag(2),nu=nu),G=list(G1=list(V=psi*diag(2),nu=nu),G2=list(V=psi*diag(2),nu=nu)))
+#prior<-list(R=list(V=psi*diag(2),nu=nu),G=list(G1=list(V=psi*diag(2),nu=nu),G2=list(V=psi*diag(2),nu=nu)))
+
+modelmulti<-MCMCglmm(cbind(speed,length)~trait-1,
+                     random=~us(trait):animal+us(trait):clutch,
+                     rcov=~us(trait):units,
+                     family=c("gaussian","gaussian"),
+                     prior=prior,
+                     ginverse=list(animal=Ainv),
+                     data=phens_norm,nitt=100000,burnin=10000,thin=10)
+
+summary(modelmulti)
+
+#Calculate heritability of each trait, and genetic correlation
+
+heritSL=modelmulti$VCV[,"traitlength:traitlength.animal"]/
+  (modelmulti$VCV[,"traitlength:traitlength.animal"]
+   +modelmulti$VCV[,"traitlength:traitlength.clutch"]
+   +modelmulti$VCV[,"traitlength:traitlength.units"])
+plot(heritSL)
+mean(heritSL)
+
+heritUcrit=modelmulti$VCV[,"traitspeed:traitspeed.animal"]/
+  (modelmulti$VCV[,"traitspeed:traitspeed.animal"]
+   +modelmulti$VCV[,"traitspeed:traitspeed.clutch"]
+   +modelmulti$VCV[,"traitspeed:traitspeed.units"])
+plot(heritUcrit)
+mean(heritUcrit)
+
+G_elements<-c(mean(modelmulti$VCV[,1]), mean(modelmulti$VCV[,2]), 
+              mean(modelmulti$VCV[,3]), mean(modelmulti$VCV[,4]))
+
+corr.gen=modelmulti$VCV[,"traitspeed:traitlength.animal"]/
+  sqrt(modelmulti$VCV[,"traitspeed:traitspeed.animal"]
+       *modelmulti$VCV[,"traitlength:traitlength.animal"])
+
+#genetic covariance
+var_anim2=modelmulti$VCV[,"traitspeed:traitlength.animal"]
+var_anim2=as.data.frame(var_anim2)
+colnames(var_anim2)=c('genetic covariance')
+mcmc_areas(var_anim2,prob=0.95,pars=c('genetic covariance'),area_method='equal height')
+
+#Diagnostics: effective sample sizes, autocorrelation
+autocorr(heritSL)
+autocorr(heritUcrit)
+autocorr(corr.gen)
+```

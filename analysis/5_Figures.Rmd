@@ -82,3 +82,254 @@ ggsave(filename = 'fig3_Ucrit',plot=g, device = 'jpeg',dpi=300,path='../figures/
 rm(Ucrit_noparent_prior1,Ucrit_withparent_prior1,Ucrit_noparent_prior2,Ucrit_withparent_prior2,a,b,c,d)
 ```
 
+## Figure S3 (SL, no parent)
+
+```{r}
+load(file='../data/h2data.RData')
+nu = 0.001
+p_var = var(phens$length,na.rm=TRUE) #total phenotypic variance
+
+###########################################
+#original prior
+###########################################
+
+load(file='../model_runs/priors_and_posts/SL_noparent_2.RData')
+model1 <- model
+
+p_A = p_var/3 #prior mode for additive genetic effect
+V_A = ((nu+2)/nu)*p_A #prior parameter V (inverse Wishart) for additive genetic effect
+p_C = p_var/3
+V_C = ((nu+2)/nu)*p_C
+p_E = p_var/3
+V_E = ((nu+2)/nu)*p_E
+prior1 = list(R=list(V=V_E,nu=nu),G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu)))
+
+prior1_VA <- priorandpost_plot(model1,prior1,xlim=0.02,i=1)
+prior1_VC <- priorandpost_plot(model1,prior1,xlim=0.02,i=2)
+prior1_VE <- priorandpost_plot(model1,prior1,xlim=0.02,i=3)
+prior1_h2 <- herit_plot(model1,prior1)
+
+###########################################
+#alt prior, parameter expansion
+###########################################
+
+load(file='../model_runs/priors_and_posts/SL_noparent_1a.RData')
+model2 <- model
+
+prior2 = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G2=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1)))
+
+prior2_VA <- priorandpost_plot(model2,prior2,xlim=0.02,i=1)
+prior2_VC <- priorandpost_plot(model2,prior2,xlim=0.02,i=2)
+prior2_VE <- priorandpost_plot(model2,prior2,xlim=0.02,i=3)
+prior2_h2 <- herit_plot(model2,prior2)
+
+###########################################
+#alt prior, no parameter expansion
+###########################################
+
+load(file='../model_runs/priors_and_posts/SL_noparent_1.RData')
+model3 <- model
+
+prior3 = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = .002),G2=list(V = 1,nu = .002)))
+
+prior3_VA <- priorandpost_plot(model3,prior3,xlim=0.02,i=1,xax=TRUE)
+prior3_VC <- priorandpost_plot(model3,prior3,xlim=0.02,i=2,xax=TRUE)
+prior3_VE <- priorandpost_plot(model3,prior3,xlim=0.02,i=3,xax=TRUE)
+prior3_h2 <- herit_plot(model3,prior3,xax=TRUE)
+
+###########################################
+### Combine everything
+###########################################
+
+g <- grid.arrange(prior1_VA,prior1_VC,prior1_VE,prior1_h2,
+                  prior2_VA,prior2_VC,prior2_VE,prior2_h2,
+                  prior3_VA,prior3_VC,prior3_VE,prior3_h2,
+                  nrow=3,ncol=4)
+ggsave(filename = 'figS3',plot=g, device = 'jpeg',dpi=300,path='../figures/final/',width=5.7,height=4.4,units='in')
+```
+
+## Figure S4 (SL, with parent)
+
+```{r}
+load(file='../data/h2data.RData')
+nu = 0.001
+p_var = var(phens$length,na.rm=TRUE) #total phenotypic variance
+
+###########################################
+#original prior
+###########################################
+
+load(file='../model_runs/priors_and_posts/SL_withparent_2.RData')
+model1 <- model
+
+p_A = p_var * 0.2
+V_A = ((nu+2)/nu)*p_A
+V_C = V_A
+V_D = V_A
+V_S = V_A
+V_E = V_A
+
+prior1 = list(R=list(V=V_E,nu=nu),
+             G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu),G3=list(V=V_D,nu=nu),G4=list(V=V_S,nu=nu)))
+
+prior1_VA <- priorandpost_plot(model1,prior1,xlim=0.02,i=1)
+prior1_VC <- priorandpost_plot(model1,prior1,xlim=0.02,i=2)
+prior1_VD <- priorandpost_plot(model1,prior1,xlim=0.02,i=3)
+prior1_VS <- priorandpost_plot(model1,prior1,xlim=0.02,i=4)
+prior1_VE <- priorandpost_plot(model1,prior1,xlim=0.02,i=5)
+prior1_h2 <- herit_plot(model1,prior1)
+
+###########################################
+#alt prior, parameter expansion
+###########################################
+
+load(file='../model_runs/priors_and_posts/SL_withparent_1a.RData')
+model2 <- model
+prior2 = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G2=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                    G3=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G4=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1)))
+
+prior2_VA <- priorandpost_plot(model2,prior2,xlim=0.02,i=1)
+prior2_VC <- priorandpost_plot(model2,prior2,xlim=0.02,i=2)
+prior2_VD <- priorandpost_plot(model2,prior2,xlim=0.02,i=3)
+prior2_VS <- priorandpost_plot(model2,prior2,xlim=0.02,i=4)
+prior2_VE <- priorandpost_plot(model2,prior2,xlim=0.02,i=5)
+prior2_h2 <- herit_plot(model2,prior2)
+
+###########################################
+#alt prior, no parameter expansion
+###########################################
+
+load(file='../model_runs/priors_and_posts/SL_withparent_1.RData')
+model3 <- model
+prior3 = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = .002),G2=list(V = 1,nu = .002),G3=list(V = 1,nu = .002),G4=list(V = 1,nu = .002)))
+
+prior3_VA <- priorandpost_plot(model3,prior3,xlim=0.02,i=1,xax=TRUE)
+prior3_VC <- priorandpost_plot(model3,prior3,xlim=0.02,i=2,xax=TRUE)
+prior3_VD <- priorandpost_plot(model3,prior3,xlim=0.02,i=3,xax=TRUE)
+prior3_VS <- priorandpost_plot(model3,prior3,xlim=0.02,i=4,xax=TRUE)
+prior3_VE <- priorandpost_plot(model3,prior3,xlim=0.02,i=5,xax=TRUE)
+prior3_h2 <- herit_plot(model3,prior3,xax=TRUE)
+
+###########################################
+### Combine everything
+###########################################
+
+g <- grid.arrange(prior1_VA,prior1_VC,prior1_VD,prior1_VS,prior1_VE,prior1_h2,
+                  prior2_VA,prior2_VC,prior2_VD,prior2_VS,prior2_VE,prior2_h2,
+                  prior3_VA,prior3_VC,prior3_VD,prior3_VS,prior3_VE,prior3_h2,
+                  nrow=3,ncol=6)
+ggsave(filename = 'figS4',plot=g, device = 'jpeg',dpi=300,path='../figures/final/',width=8,height=4,units='in')
+```
+
+## Figure S5 (Ucrit, no parent)
+```{r}
+load(file='../data/h2data.RData')
+nu = 0.001
+p_var = var(phens$speed,na.rm=TRUE) #total phenotypic variance
+
+###########################################
+#original prior
+###########################################
+
+load(file='../model_runs/priors_and_posts/Ucrit_noparent_2.RData')
+model1 <- model
+
+p_A = p_var/3 #prior mode for additive genetic effect
+V_A = ((nu+2)/nu)*p_A #prior parameter V (inverse Wishart) for additive genetic effect
+p_C = p_var/3
+V_C = ((nu+2)/nu)*p_C
+p_E = p_var/3
+V_E = ((nu+2)/nu)*p_E
+prior1 = list(R=list(V=V_E,nu=nu),G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu)))
+
+prior1_VA <- priorandpost_plot(model1,prior1,xlim=5,i=1)
+prior1_VC <- priorandpost_plot(model1,prior1,xlim=5,i=2)
+prior1_VE <- priorandpost_plot(model1,prior1,xlim=5,i=3)
+prior1_h2 <- herit_plot(model1,prior1)
+
+###########################################
+#alt prior, parameter expansion
+###########################################
+
+load(file='../model_runs/priors_and_posts/Ucrit_noparent_1.RData')
+model2 <- model
+
+prior2 = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G2=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1)))
+
+prior2_VA <- priorandpost_plot(model2,prior2,xlim=5,i=1,xax=TRUE)
+prior2_VC <- priorandpost_plot(model2,prior2,xlim=5,i=2,xax=TRUE)
+prior2_VE <- priorandpost_plot(model2,prior2,xlim=5,i=3,xax=TRUE)
+prior2_h2 <- herit_plot(model2,prior2,xax=TRUE)
+
+###########################################
+### Combine everything
+###########################################
+
+g <- grid.arrange(prior1_VA,prior1_VC,prior1_VE,prior1_h2,
+                  prior2_VA,prior2_VC,prior2_VE,prior2_h2,
+                  nrow=2,ncol=4)
+ggsave(filename = 'figS5',plot=g, device = 'jpeg',dpi=300,path='../figures/final/',width=5.7,height=2*4.4/3,units='in')
+```
+
+## Figure S6 (Ucrit, with parent)
+
+```{r}
+load(file='../data/h2data.RData')
+nu = 0.001
+p_var = var(phens$speed,na.rm=TRUE) #total phenotypic variance
+
+###########################################
+#original prior
+###########################################
+
+load(file='../model_runs/priors_and_posts/Ucrit_withparent_2.RData')
+model1 <- model
+
+p_A = p_var * 0.2
+V_A = ((nu+2)/nu)*p_A
+V_C = V_A
+V_D = V_A
+V_S = V_A
+V_E = V_A
+
+prior1 = list(R=list(V=V_E,nu=nu),
+             G=list(G1=list(V=V_A,nu=nu),G2=list(V=V_C,nu=nu),G3=list(V=V_D,nu=nu),G4=list(V=V_S,nu=nu)))
+
+prior1_VA <- priorandpost_plot(model1,prior1,xlim=5,i=1)
+prior1_VC <- priorandpost_plot(model1,prior1,xlim=5,i=2)
+prior1_VD <- priorandpost_plot(model1,prior1,xlim=5,i=3)
+prior1_VS <- priorandpost_plot(model1,prior1,xlim=5,i=4)
+prior1_VE <- priorandpost_plot(model1,prior1,xlim=5,i=5)
+prior1_h2 <- herit_plot(model1,prior1)
+
+###########################################
+#alt prior, parameter expansion
+###########################################
+
+load(file='../model_runs/priors_and_posts/Ucrit_withparent_1.RData')
+model2 <- model
+prior2 = list(R=list(V=1,nu=0.002),
+             G=list(G1=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G2=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),
+                    G3=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1),G4=list(V = 1,nu = 1000, alpha.mu=0, alpha.V=1)))
+
+prior2_VA <- priorandpost_plot(model2,prior2,xlim=5,i=1,xax=TRUE)
+prior2_VC <- priorandpost_plot(model2,prior2,xlim=5,i=2,xax=TRUE)
+prior2_VD <- priorandpost_plot(model2,prior2,xlim=5,i=3,xax=TRUE)
+prior2_VS <- priorandpost_plot(model2,prior2,xlim=5,i=4,xax=TRUE)
+prior2_VE <- priorandpost_plot(model2,prior2,xlim=5,i=5,xax=TRUE)
+prior2_h2 <- herit_plot(model2,prior2,xax=TRUE)
+
+###########################################
+### Combine everything
+###########################################
+
+g <- grid.arrange(prior1_VA,prior1_VC,prior1_VD,prior1_VS,prior1_VE,prior1_h2,
+                  prior2_VA,prior2_VC,prior2_VD,prior2_VS,prior2_VE,prior2_h2,
+                  nrow=2,ncol=6)
+ggsave(filename = 'figS6',plot=g, device = 'jpeg',dpi=300,path='../figures/final/',width=8,height=2*4/3,units='in')
+```

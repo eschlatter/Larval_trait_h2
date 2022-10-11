@@ -1,5 +1,5 @@
 ---
-title: "Generate priors and run models"
+title: "Run models"
 author: "E Schlatter"
 date: "12/18/2021"
 output: html_document
